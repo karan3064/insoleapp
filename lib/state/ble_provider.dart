@@ -28,6 +28,10 @@ class BleProvider extends ChangeNotifier {
   bool isTesting = false;
   int testSeconds = 0;
 
+  /// Set whenever scanning/connecting fails, so the UI can surface it
+  /// instead of failing silently. Cleared at the start of the next attempt.
+  String? lastError;
+
   /// Live 21x17 pressure grid, updated as data streams in.
   List<List<int>> grid = emptyGrid();
 
@@ -52,40 +56,73 @@ class BleProvider extends ChangeNotifier {
       Permission.locationWhenInUse,
     ].request();
 
-    return statuses.values.every((s) => s.isGranted || s.isLimited);
+    final denied = statuses.entries.where((e) => !(e.value.isGranted || e.value.isLimited));
+    if (denied.isNotEmpty) {
+      lastError = 'Permission denied: ${denied.map((e) => e.key.toString()).join(', ')}. '
+          'Enable these for the app in your phone\'s Settings.';
+      return false;
+    }
+    return true;
   }
 
   Future<void> startScan() async {
     if (isScanning) return;
+    lastError = null;
 
-    final granted = await ensurePermissions();
-    if (!granted) return;
-
-    discovered.clear();
-    isScanning = true;
-    notifyListeners();
-
-    await FlutterBluePlus.startScan(timeout: const Duration(seconds: 15));
-
-    _scanSub?.cancel();
-    _scanSub = FlutterBluePlus.scanResults.listen((results) {
-      for (final r in results) {
-        final name = r.device.platformName.isNotEmpty
-            ? r.device.platformName
-            : r.advertisementData.advName;
-
-        if (name.isEmpty || !name.startsWith('B2U')) continue;
-        if (discovered.any((d) => d.name == name)) continue;
-
-        discovered.add(InsoleDevice(device: r.device, name: name));
+    try {
+      if (!await FlutterBluePlus.isSupported) {
+        lastError = 'This device does not support Bluetooth Low Energy.';
+        notifyListeners();
+        return;
       }
-      notifyListeners();
-    });
 
-    FlutterBluePlus.isScanning.where((s) => s == false).first.then((_) {
+      final adapterState = await FlutterBluePlus.adapterState.first;
+      if (adapterState != BluetoothAdapterState.on) {
+        lastError = 'Bluetooth is off. Turn it on and try again.';
+        notifyListeners();
+        return;
+      }
+
+      final granted = await ensurePermissions();
+      if (!granted) {
+        notifyListeners();
+        return;
+      }
+
+      discovered.clear();
+      isScanning = true;
+      notifyListeners();
+
+      await FlutterBluePlus.startScan(timeout: const Duration(seconds: 15));
+
+      _scanSub?.cancel();
+      _scanSub = FlutterBluePlus.scanResults.listen((results) {
+        for (final r in results) {
+          final name = r.device.platformName.isNotEmpty
+              ? r.device.platformName
+              : r.advertisementData.advName;
+
+          if (name.isEmpty || !name.startsWith('B2U')) continue;
+          if (discovered.any((d) => d.name == name)) continue;
+
+          discovered.add(InsoleDevice(device: r.device, name: name));
+        }
+        notifyListeners();
+      }, onError: (Object e) {
+        lastError = 'Scan error: $e';
+        isScanning = false;
+        notifyListeners();
+      });
+
+      FlutterBluePlus.isScanning.where((s) => s == false).first.then((_) {
+        isScanning = false;
+        notifyListeners();
+      });
+    } catch (e) {
+      lastError = 'Failed to start scan: $e';
       isScanning = false;
       notifyListeners();
-    });
+    }
   }
 
   Future<void> stopScan() async {
@@ -126,6 +163,7 @@ class BleProvider extends ChangeNotifier {
       notifyListeners();
       return true;
     } catch (e) {
+      lastError = 'Failed to connect to ${insole.name}: $e';
       insole.connecting = false;
       insole.connected = false;
       notifyListeners();

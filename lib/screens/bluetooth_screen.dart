@@ -40,7 +40,7 @@ class _BluetoothScreenState extends State<BluetoothScreen> {
     if (!mounted) return;
     if (!ok) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to connect')),
+        SnackBar(content: Text(ble.lastError ?? 'Failed to connect')),
       );
       return;
     }
@@ -84,12 +84,27 @@ class _BluetoothScreenState extends State<BluetoothScreen> {
               'Connect both the left and right insole (${ble.connectedDevices.length}/2 connected)',
               style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
             ),
+            if (ble.lastError != null) ...[
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.error.withValues(alpha: 0.12),
+                  border: Border.all(color: AppColors.error),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(ble.lastError!, style: const TextStyle(color: AppColors.error)),
+              ),
+            ],
             const SizedBox(height: 16),
             Expanded(
               child: ble.discovered.isEmpty
-                  ? const Center(
-                      child: Text('Scanning for insoles...',
-                          style: TextStyle(color: AppColors.textSecondary)),
+                  ? Center(
+                      child: Text(
+                        ble.isScanning ? 'Scanning for insoles...' : 'No devices found',
+                        style: const TextStyle(color: AppColors.textSecondary),
+                      ),
                     )
                   : ListView.separated(
                       itemCount: ble.discovered.length,
