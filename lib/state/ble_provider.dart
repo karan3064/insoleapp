@@ -214,7 +214,10 @@ class BleProvider extends ChangeNotifier {
     if (isCapturing) {
       leftLine.push(frame.leftPoints);
       rightLine.push(frame.rightPoints);
-      _frames.add(PressureFrame(time: _frames.length, item: frame.grid));
+      final elapsedMs = _testStartTime == null
+          ? 0
+          : DateTime.now().difference(_testStartTime!).inMilliseconds;
+      _frames.add(PressureFrame(time: elapsedMs, item: frame.grid));
     }
   }
 

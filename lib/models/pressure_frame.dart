@@ -1,6 +1,10 @@
-/// One captured snapshot of the 21x17 sensor grid during a test, with the
-/// capture-sequence `time` value used by the gait analytics.
+/// One captured snapshot of the 21x17 sensor grid during a test.
 class PressureFrame {
+  /// Milliseconds elapsed since the test/session started, at the moment
+  /// this frame was decoded. Real wall-clock timing (not a sequence index)
+  /// -- stride-time / cadence / variability metrics depend on this being
+  /// accurate, since BLE notifications don't arrive at a perfectly fixed
+  /// rate.
   final int time;
   final List<List<int>> item; // 21 rows x 17 cols
 

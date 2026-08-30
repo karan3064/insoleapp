@@ -1,11 +1,18 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../models/insole_record.dart';
 import '../models/pressure_frame.dart';
+import '../models/user_profile.dart';
+import '../services/clinical_gait_analysis.dart';
+import '../services/clinical_report_service.dart';
 import '../services/format_utils.dart';
 import '../services/gait_analysis.dart';
 import '../services/health_calc.dart';
@@ -68,20 +75,108 @@ class _DetailScreenState extends State<DetailScreen> {
         _stop();
         return;
       }
-      final frame = record.details.firstWhere(
-        (f) => f.time == _playhead,
-        orElse: () => PressureFrame(time: _playhead, item: _grid),
-      );
+      final grid = _gridAtSecond(record, _playhead);
       setState(() {
-        _grid = frame.item;
+        if (grid != null) _grid = grid;
         _playhead++;
       });
     });
   }
 
+  /// The most recent captured frame at or before [second], since frames
+  /// arrive at an uneven real-time rate (not one-per-second) -- `details`
+  /// is sorted ascending by `time` (ms since session start).
+  List<List<int>>? _gridAtSecond(InsoleRecord record, int second) {
+    final ms = second * 1000;
+    List<List<int>>? result;
+    for (final f in record.details) {
+      if (f.time > ms) break;
+      result = f.item;
+    }
+    return result;
+  }
+
   void _stop() {
     _timer?.cancel();
     setState(() => _playing = false);
+  }
+
+  /// Renders a nullable metric (null when there isn't enough gait-cycle
+  /// data to compute it, e.g. fewer than two heel-strikes) as '--'.
+  static String _fmt(double? value, {required String suffix}) {
+    if (value == null) return '--';
+    return '${value.toStringAsFixed(value.abs() < 10 ? 1 : 0)}$suffix';
+  }
+
+  Future<void> _showExportSheet(
+    InsoleRecord record,
+    ClinicalGaitReport gait,
+    UserProfile profile,
+    String? email,
+  ) async {
+    await showModalBottomSheet(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.picture_as_pdf_outlined),
+              title: const Text('Export as PDF'),
+              subtitle: const Text('For printing or sharing with a clinician'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _exportPdf(record, gait, profile, email);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.table_chart_outlined),
+              title: const Text('Export as CSV'),
+              subtitle: const Text('For spreadsheets or EHR import'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _exportCsv(record, gait, profile, email);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _exportPdf(
+    InsoleRecord record,
+    ClinicalGaitReport gait,
+    UserProfile profile,
+    String? email,
+  ) async {
+    final bytes = await ClinicalReportService.buildPdf(
+      record: record,
+      gait: gait,
+      profile: profile,
+      patientEmail: email,
+    );
+    await Printing.sharePdf(bytes: bytes, filename: '${record.name}_gait_report.pdf');
+  }
+
+  Future<void> _exportCsv(
+    InsoleRecord record,
+    ClinicalGaitReport gait,
+    UserProfile profile,
+    String? email,
+  ) async {
+    final csv = ClinicalReportService.buildCsv(
+      record: record,
+      gait: gait,
+      profile: profile,
+      patientEmail: email,
+    );
+    final bytes = Uint8List.fromList(utf8.encode(csv));
+    await SharePlus.instance.share(
+      ShareParams(
+        files: [XFile.fromData(bytes, name: '${record.name}_gait_report.csv', mimeType: 'text/csv')],
+      ),
+    );
   }
 
   @override
@@ -120,8 +215,19 @@ class _DetailScreenState extends State<DetailScreen> {
     final lRear = GaitAnalysis.calculateAverage(record.line, _rearKeys).round();
     final rRear = GaitAnalysis.calculateAverage(record.rightLine, _rearKeys).round();
 
+    final gait = ClinicalGaitAnalysis.analyze(record);
+
     return Scaffold(
-      appBar: AppBar(title: Text(record.name)),
+      appBar: AppBar(
+        title: Text(record.name),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.ios_share),
+            tooltip: 'Export clinical report',
+            onPressed: () => _showExportSheet(record, gait, auth.profile, auth.email),
+          ),
+        ],
+      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -204,6 +310,84 @@ class _DetailScreenState extends State<DetailScreen> {
             const SizedBox(height: 20),
             _SectionTitle('Grounding method'),
             _LRRow(left: footprintResult.landingLeft, right: footprintResult.landingRight),
+            const SizedBox(height: 20),
+            _SectionTitle('Clinical gait metrics'),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: p.card(),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _StatBox(
+                          label: 'Cadence',
+                          value: _fmt(gait.cadenceStepsPerMin, suffix: ' spm'),
+                        ),
+                      ),
+                      Expanded(
+                        child: _StatBox(
+                          label: 'Double support',
+                          value: _fmt(gait.doubleSupportPercent, suffix: '%'),
+                        ),
+                      ),
+                      Expanded(
+                        child: _StatBox(
+                          label: 'Single support',
+                          value: _fmt(gait.singleSupportPercent, suffix: '%'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const Divider(height: 24),
+                  const _ClinicalMetricHeader(),
+                  _ClinicalMetricRow(
+                    label: 'Stride time',
+                    left: _fmt(gait.left.strideTimeMeanMs, suffix: ' ms'),
+                    right: _fmt(gait.right.strideTimeMeanMs, suffix: ' ms'),
+                  ),
+                  _ClinicalMetricRow(
+                    label: 'Stride time CV',
+                    left: _fmt(gait.left.strideTimeCvPercent, suffix: '%'),
+                    right: _fmt(gait.right.strideTimeCvPercent, suffix: '%'),
+                  ),
+                  _ClinicalMetricRow(
+                    label: 'Stance time',
+                    left: _fmt(gait.left.stanceTimeMeanMs, suffix: ' ms'),
+                    right: _fmt(gait.right.stanceTimeMeanMs, suffix: ' ms'),
+                  ),
+                  _ClinicalMetricRow(
+                    label: 'Swing time',
+                    left: _fmt(gait.left.swingTimeMeanMs, suffix: ' ms'),
+                    right: _fmt(gait.right.swingTimeMeanMs, suffix: ' ms'),
+                  ),
+                  const Divider(height: 24),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _StatBox(
+                          label: 'Stride asymmetry',
+                          value: _fmt(gait.strideTimeAsymmetryPercent, suffix: '%'),
+                        ),
+                      ),
+                      Expanded(
+                        child: _StatBox(
+                          label: 'Stance asymmetry',
+                          value: _fmt(gait.stanceTimeAsymmetryPercent, suffix: '%'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Raw gait measurements from heel-strike/toe-off detection. '
+                    'Not a diagnosis -- for review by a clinician.',
+                    style: TextStyle(color: p.textSecondary, fontSize: 11),
+                  ),
+                ],
+              ),
+            ),
             if (record.path.isNotEmpty) ...[
               const SizedBox(height: 20),
               SizedBox(
@@ -311,6 +495,48 @@ class _LRRow extends StatelessWidget {
         Text('Left foot: $left', style: TextStyle(color: p.textSecondary)),
         Text('Right foot: $right', style: TextStyle(color: p.textSecondary)),
       ],
+    );
+  }
+}
+
+class _ClinicalMetricHeader extends StatelessWidget {
+  const _ClinicalMetricHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    final style = TextStyle(color: p.textSecondary, fontSize: 12, fontWeight: FontWeight.w600);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        children: [
+          const Expanded(flex: 3, child: SizedBox()),
+          Expanded(flex: 2, child: Text('Left', textAlign: TextAlign.center, style: style)),
+          Expanded(flex: 2, child: Text('Right', textAlign: TextAlign.center, style: style)),
+        ],
+      ),
+    );
+  }
+}
+
+class _ClinicalMetricRow extends StatelessWidget {
+  final String label;
+  final String left;
+  final String right;
+  const _ClinicalMetricRow({required this.label, required this.left, required this.right});
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          Expanded(flex: 3, child: Text(label, style: TextStyle(color: p.textSecondary))),
+          Expanded(flex: 2, child: Text(left, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w700))),
+          Expanded(flex: 2, child: Text(right, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w700))),
+        ],
+      ),
     );
   }
 }
