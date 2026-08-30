@@ -48,7 +48,7 @@ class RecordsScreen extends StatelessWidget {
                                     width: 12,
                                     height: 12,
                                     decoration: const BoxDecoration(
-                                        gradient: AppColors.gradBlue, shape: BoxShape.circle),
+                                        gradient: AppColors.gradMechanics, shape: BoxShape.circle),
                                   ),
                                   const SizedBox(width: 16),
                                   Expanded(

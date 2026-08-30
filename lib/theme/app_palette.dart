@@ -43,17 +43,19 @@ class AppPalette {
     ],
   );
 
-  /// The original dark navy look: card elevation via a visible border
-  /// instead of a shadow (shadows don't read well on dark backgrounds).
+  /// Classic Samsung-Health-style AMOLED dark: a true black background
+  /// (not navy) so accent colors and white text pop with real contrast,
+  /// neutral (not blue-tinted) grays for secondary text, and card
+  /// elevation via a visible border since shadows don't read on black.
   static const dark = AppPalette(
-    bg: Color(0xFF0F1720),
-    surface: Color(0xFF182430),
-    surface2: Color(0xFF1F2E3B),
+    bg: Color(0xFF000000),
+    surface: Color(0xFF121212),
+    surface2: Color(0xFF1C1C1E),
     text: Color(0xFFFFFFFF),
-    textSecondary: Color(0xFF92B7C9),
-    textTertiary: Color(0xFF5B7A8C),
-    border: Color(0xFF263542),
-    btnColor: Color(0xFF233C48),
+    textSecondary: Color(0xFF9AA0A6),
+    textTertiary: Color(0xFF6B7076),
+    border: Color(0xFF262626),
+    btnColor: Color(0xFF1E1E1E),
     cardShadow: [],
   );
 

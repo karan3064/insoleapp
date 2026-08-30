@@ -131,7 +131,7 @@ class HomeScreen extends StatelessWidget {
                     title: 'BMI',
                     value: bmi?.toString() ?? '--',
                     subtitle: bmiCategory ?? 'Set your profile',
-                    gradient: AppColors.gradOrange,
+                    gradient: AppColors.gradBody,
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -140,7 +140,7 @@ class HomeScreen extends StatelessWidget {
                     title: 'Cadence',
                     value: '$cadence',
                     subtitle: 'spm',
-                    gradient: AppColors.gradPurple,
+                    gradient: AppColors.gradActivity,
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -149,7 +149,7 @@ class HomeScreen extends StatelessWidget {
                     title: 'Ground contact',
                     value: '$groundContactMs',
                     subtitle: 'ms',
-                    gradient: AppColors.gradBlue,
+                    gradient: AppColors.gradMechanics,
                   ),
                 ),
               ],
@@ -162,7 +162,7 @@ class HomeScreen extends StatelessWidget {
                     child: MetricCard(
                       title: 'Footprint',
                       value: footprintLabel,
-                      gradient: AppColors.gradGreen,
+                      gradient: AppColors.gradMechanics,
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -170,7 +170,7 @@ class HomeScreen extends StatelessWidget {
                     child: MetricCard(
                       title: 'Arch',
                       value: archLabel,
-                      gradient: AppColors.gradPink,
+                      gradient: AppColors.gradMechanics,
                     ),
                   ),
                 ],
@@ -184,7 +184,7 @@ class HomeScreen extends StatelessWidget {
               label: context.watch<BleProvider>().connectedDevices.length >= 2
                   ? 'Resume live test'
                   : 'Connect insoles',
-              gradient: AppColors.gradBlue,
+              gradient: AppColors.gradActivity,
               onTap: () {
                 // Already connected -- skip straight back to the live test
                 // instead of the scan screen (already-connected peripherals

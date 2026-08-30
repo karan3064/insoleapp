@@ -70,18 +70,18 @@ class TrendsScreen extends StatelessWidget {
               children: [
                 Expanded(
                   child: MetricCard(
-                      title: 'Total sessions', value: '$totalSessions', gradient: AppColors.gradBlue),
+                      title: 'Total sessions', value: '$totalSessions', gradient: AppColors.gradActivity),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: MetricCard(title: 'Avg steps', value: '$avgSteps', gradient: AppColors.gradPurple),
+                  child: MetricCard(title: 'Avg steps', value: '$avgSteps', gradient: AppColors.gradActivity),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: MetricCard(
                     title: 'vs last week',
                     value: '${trendPct >= 0 ? '+' : ''}$trendPct%',
-                    gradient: trendPct >= 0 ? AppColors.gradGreen : AppColors.gradOrange,
+                    gradient: trendPct >= 0 ? AppColors.gradActivity : AppColors.gradBody,
                   ),
                 ),
               ],

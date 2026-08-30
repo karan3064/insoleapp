@@ -15,7 +15,7 @@ class MetricCard extends StatelessWidget {
     required this.title,
     required this.value,
     this.subtitle,
-    this.gradient = AppColors.gradBlue,
+    this.gradient = AppColors.gradActivity,
   });
 
   @override

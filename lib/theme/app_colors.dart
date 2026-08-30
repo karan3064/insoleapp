@@ -21,31 +21,25 @@ class AppColors {
   /// best on it, so this doesn't flip with light/dark mode.
   static const onPrimary = Color(0xFF0F1720);
 
-  // Gradients (Samsung Health style cards)
-  static const gradBlue = LinearGradient(
+  // Per-category gradients -- classic Samsung Health used one fixed color
+  // per metric category (green always meant activity, blue always meant
+  // sleep, etc.), never an arbitrary rainbow reshuffled per card. These
+  // three are assigned the same way: each metric card below always uses
+  // the same one of these three, chosen by category, not by position.
+  static const gradActivity = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [primary, primaryDark],
+  );
+  static const gradMechanics = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
     colors: [Color(0xFF3B82F6), Color(0xFF06B6D4)],
   );
-  static const gradPurple = LinearGradient(
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-    colors: [Color(0xFF8B5CF6), Color(0xFFD946EF)],
-  );
-  static const gradOrange = LinearGradient(
+  static const gradBody = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
     colors: [Color(0xFFF97316), Color(0xFFEF4444)],
-  );
-  static const gradGreen = LinearGradient(
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-    colors: [Color(0xFF22C55E), Color(0xFF10B981)],
-  );
-  static const gradPink = LinearGradient(
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-    colors: [Color(0xFFEC4899), Color(0xFFF43F5E)],
   );
 
   // Heatmap color ramp (from chart/detail Heat component's visualMap)

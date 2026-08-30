@@ -212,7 +212,7 @@ class _SettingsGroup extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       decoration: accent
-          ? BoxDecoration(gradient: AppColors.gradOrange, borderRadius: BorderRadius.circular(20))
+          ? BoxDecoration(gradient: AppColors.gradBody, borderRadius: BorderRadius.circular(20))
           : p.card(),
       child: Column(children: children),
     );
