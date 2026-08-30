@@ -25,8 +25,13 @@ class BleProvider extends ChangeNotifier {
   final List<InsoleDevice> connectedDevices = [];
 
   bool isScanning = false;
-  bool isTesting = false;
-  int testSeconds = 0;
+
+  /// True from the moment both insoles are connected until they're
+  /// disconnected. Pressure/line/GPS data is captured continuously the
+  /// whole time -- there's no separate "start/stop test" step, so you never
+  /// need to reconnect just to record another session.
+  bool isCapturing = false;
+  int elapsedSeconds = 0;
 
   /// Set whenever scanning/connecting fails, so the UI can surface it
   /// instead of failing silently. Cleared at the start of the next attempt.
@@ -160,6 +165,11 @@ class BleProvider extends ChangeNotifier {
       if (!connectedDevices.any((d) => d.id == insole.id)) {
         connectedDevices.add(insole);
       }
+
+      if (connectedDevices.length >= 2 && !isCapturing) {
+        await _beginCapture();
+      }
+
       notifyListeners();
       return true;
     } catch (e) {
@@ -180,6 +190,11 @@ class BleProvider extends ChangeNotifier {
     }
     insole.connected = false;
     connectedDevices.removeWhere((d) => d.id == insole.id);
+
+    if (connectedDevices.length < 2) {
+      _stopCapture();
+    }
+
     notifyListeners();
   }
 
@@ -196,34 +211,47 @@ class BleProvider extends ChangeNotifier {
     grid = frame.grid;
     notifyListeners();
 
-    if (isTesting) {
+    if (isCapturing) {
       leftLine.push(frame.leftPoints);
       rightLine.push(frame.rightPoints);
       _frames.add(PressureFrame(time: _frames.length, item: frame.grid));
     }
   }
 
-  Future<void> startTest() async {
-    isTesting = true;
-    testSeconds = 0;
-    grid = emptyGrid();
-    leftLine = FootLineData();
-    rightLine = FootLineData();
-    _frames.clear();
-    path.clear();
-    totalDistanceKm = 0;
+  /// Auto-invoked once both insoles are connected. Resets the accumulators
+  /// and starts the elapsed-time timer + GPS tracking; keeps running
+  /// continuously (through any number of saved sessions) until disconnect.
+  Future<void> _beginCapture() async {
+    isCapturing = true;
+    _resetAccumulators();
     _testStartTime = DateTime.now();
-    _parser.reset();
 
     _testTimer?.cancel();
     _testTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      testSeconds++;
+      elapsedSeconds++;
       notifyListeners();
     });
 
     unawaited(_startLocationTracking());
 
     notifyListeners();
+  }
+
+  void _stopCapture() {
+    isCapturing = false;
+    _testTimer?.cancel();
+    _positionSub?.cancel();
+  }
+
+  void _resetAccumulators() {
+    elapsedSeconds = 0;
+    grid = emptyGrid();
+    leftLine = FootLineData();
+    rightLine = FootLineData();
+    _frames.clear();
+    path.clear();
+    totalDistanceKm = 0;
+    _parser.reset();
   }
 
   Future<void> _startLocationTracking() async {
@@ -264,13 +292,12 @@ class BleProvider extends ChangeNotifier {
     });
   }
 
-  /// Stops the test and returns the completed record. [id] should be the
-  /// next sequential record id (mirrors `insole.list.length + 1`).
-  InsoleRecord stopTest(int id, String deviceName) {
-    isTesting = false;
-    _testTimer?.cancel();
-    _positionSub?.cancel();
-
+  /// Snapshots the currently-accumulated data into a saved record, then
+  /// immediately resets the accumulators so capture keeps going
+  /// uninterrupted -- no reconnect, no re-arming a "test mode" needed to
+  /// record the next session. [id] should be the next sequential record id
+  /// (mirrors `insole.list.length + 1`).
+  InsoleRecord saveSession(int id, String deviceName) {
     final totalTimeMin = _testStartTime == null
         ? 0
         : (DateTime.now().difference(_testStartTime!).inSeconds / 60).round();
@@ -280,7 +307,7 @@ class BleProvider extends ChangeNotifier {
       id: id,
       name: deviceName,
       date: _formattedNow(),
-      time: testSeconds,
+      time: elapsedSeconds,
       details: List.of(_frames),
       line: leftLine,
       rightLine: rightLine,
@@ -289,6 +316,11 @@ class BleProvider extends ChangeNotifier {
       totalTime: totalTimeMin,
       path: List.of(path),
     );
+
+    if (isCapturing) {
+      _resetAccumulators();
+      _testStartTime = DateTime.now();
+    }
 
     return record;
   }

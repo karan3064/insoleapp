@@ -24,40 +24,31 @@ class GatherScreen extends StatefulWidget {
 
 class _GatherScreenState extends State<GatherScreen> {
   bool _heatMode = true;
+  bool _saving = false;
 
-  Future<void> _startTest() async {
-    await context.read<BleProvider>().startTest();
-    setState(() {});
-  }
-
-  Future<void> _endTest() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        title: const Text('End test?'),
-        content: const Text('This will stop data collection and save the session.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('End')),
-        ],
-      ),
-    );
-
-    if (confirmed != true || !mounted) return;
+  /// Snapshots the session captured so far into a saved record. Capture
+  /// keeps running uninterrupted afterwards -- both insoles stay connected
+  /// and data keeps accumulating for the next one, so there's no
+  /// reconnect step between sessions.
+  Future<void> _saveSession() async {
+    setState(() => _saving = true);
 
     final ble = context.read<BleProvider>();
     final insole = context.read<InsoleProvider>();
     final auth = context.read<AuthProvider>();
 
     final deviceName = ble.connectedDevices.isNotEmpty ? ble.connectedDevices.first.name : 'Insole';
-    final record = ble.stopTest(insole.nextId, deviceName);
+    final record = ble.saveSession(insole.nextId, deviceName);
 
     await insole.saveRecord(record);
     unawaited(insole.syncRecord(auth.uid, record));
 
     if (!mounted) return;
-    Navigator.of(context).pushReplacement(
+    setState(() => _saving = false);
+
+    // Pushed (not replaced) so the back button returns here, still
+    // connected and still capturing.
+    Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => DetailScreen(recordId: record.id)),
     );
   }
@@ -95,30 +86,33 @@ class _GatherScreenState extends State<GatherScreen> {
                     ],
                   ),
                   const SizedBox(height: 16),
-                  Text(
-                    FormatUtils.secondsToMinutesString(ble.testSeconds),
-                    style: const TextStyle(color: AppColors.textSecondary),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        margin: const EdgeInsets.only(right: 8),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: ble.isCapturing ? AppColors.success : AppColors.textTertiary,
+                        ),
+                      ),
+                      Text(
+                        ble.isCapturing
+                            ? 'Recording ${FormatUtils.secondsToMinutesString(ble.elapsedSeconds)}'
+                            : 'Not connected',
+                        style: const TextStyle(color: AppColors.textSecondary),
+                      ),
+                    ],
                   ),
                 ],
               ),
             ),
             const SizedBox(height: 20),
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: ble.isTesting ? null : _startTest,
-                    child: const Text('Start test'),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: ble.isTesting ? _endTest : null,
-                    child: const Text('End test'),
-                  ),
-                ),
-              ],
+            ElevatedButton(
+              onPressed: ble.isCapturing && !_saving ? _saveSession : null,
+              child: Text(_saving ? 'Saving...' : 'Save session'),
             ),
             const SizedBox(height: 20),
             if (ble.path.isNotEmpty)

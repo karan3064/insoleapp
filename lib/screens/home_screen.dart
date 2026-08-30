@@ -5,6 +5,7 @@ import '../models/insole_record.dart';
 import '../services/gait_analysis.dart';
 import '../services/health_calc.dart';
 import '../state/auth_provider.dart';
+import '../state/ble_provider.dart';
 import '../state/insole_provider.dart';
 import '../theme/app_colors.dart';
 import '../widgets/activity_rings.dart';
@@ -12,6 +13,7 @@ import '../widgets/foot_line_chart.dart';
 import '../widgets/metric_card.dart';
 import 'bluetooth_screen.dart';
 import 'detail_screen.dart';
+import 'gather_screen.dart';
 
 /// Mirrors `pages/index/index.vue`: today's activity rings, quick stats,
 /// quick actions, and a recent-data preview.
@@ -182,11 +184,22 @@ class HomeScreen extends StatelessWidget {
             const SizedBox(height: 12),
             _ActionCard(
               icon: Icons.bluetooth,
-              label: 'Connect insoles',
+              label: context.watch<BleProvider>().connectedDevices.length >= 2
+                  ? 'Resume live test'
+                  : 'Connect insoles',
               gradient: AppColors.gradBlue,
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const BluetoothScreen()),
-              ),
+              onTap: () {
+                // Already connected -- skip straight back to the live test
+                // instead of the scan screen (already-connected peripherals
+                // stop advertising, so re-scanning would just find nothing
+                // and look like you need to reconnect).
+                final alreadyConnected = context.read<BleProvider>().connectedDevices.length >= 2;
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => alreadyConnected ? const GatherScreen() : const BluetoothScreen(),
+                  ),
+                );
+              },
             ),
             const SizedBox(height: 28),
             const Text('Data overview', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
