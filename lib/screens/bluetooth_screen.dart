@@ -18,6 +18,13 @@ class BluetoothScreen extends StatefulWidget {
 
 class _BluetoothScreenState extends State<BluetoothScreen> {
   bool _navigated = false;
+  late final BleProvider _ble;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _ble = context.read<BleProvider>();
+  }
 
   @override
   void initState() {
@@ -29,7 +36,9 @@ class _BluetoothScreenState extends State<BluetoothScreen> {
 
   @override
   void dispose() {
-    context.read<BleProvider>().stopScan();
+    // Captured in didChangeDependencies -- looking up an inherited widget
+    // via context.read() here is unsafe once the element is deactivating.
+    _ble.stopScan();
     super.dispose();
   }
 
