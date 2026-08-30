@@ -6,6 +6,7 @@ import '../state/auth_provider.dart';
 import '../state/insole_provider.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_palette.dart';
+import '../widgets/nurvosync_mark.dart';
 
 /// Mirrors `pages/splash/splash.vue`: boots local state, resolves whether
 /// the user is already logged in, and routes accordingly.
@@ -61,8 +62,20 @@ class _SplashScreenState extends State<SplashScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.directions_walk, color: AppColors.primary, size: 72),
-            const SizedBox(height: 16),
+            Container(
+              width: 96,
+              height: 96,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [AppColors.primaryDark, AppColors.primary],
+                ),
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: const Center(child: NurvoSyncMark(size: 60)),
+            ),
+            const SizedBox(height: 20),
             Text(
               'NurvoSync',
               style: TextStyle(color: p.text, fontSize: 28, fontWeight: FontWeight.w700),
