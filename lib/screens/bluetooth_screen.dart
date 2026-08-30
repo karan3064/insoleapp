@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../models/insole_device.dart';
 import '../state/ble_provider.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_palette.dart';
 import 'gather_screen.dart';
 
 /// Mirrors `pages/bluetooth/bluetooth.vue`: scans for `B2U*` insole
@@ -65,6 +66,7 @@ class _BluetoothScreenState extends State<BluetoothScreen> {
   @override
   Widget build(BuildContext context) {
     final ble = context.watch<BleProvider>();
+    final p = context.palette;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Devices')),
@@ -91,7 +93,7 @@ class _BluetoothScreenState extends State<BluetoothScreen> {
             const SizedBox(height: 8),
             Text(
               'Connect both the left and right insole (${ble.connectedDevices.length}/2 connected)',
-              style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+              style: TextStyle(color: p.textSecondary, fontSize: 13),
             ),
             if (ble.lastError != null) ...[
               const SizedBox(height: 12),
@@ -112,7 +114,7 @@ class _BluetoothScreenState extends State<BluetoothScreen> {
                   ? Center(
                       child: Text(
                         ble.isScanning ? 'Scanning for insoles...' : 'No devices found',
-                        style: const TextStyle(color: AppColors.textSecondary),
+                        style: TextStyle(color: p.textSecondary),
                       ),
                     )
                   : ListView.separated(
@@ -122,18 +124,14 @@ class _BluetoothScreenState extends State<BluetoothScreen> {
                         final d = ble.discovered[i];
                         return Container(
                           padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: AppColors.surface,
-                            border: Border.all(color: AppColors.border),
-                            borderRadius: BorderRadius.circular(16),
-                          ),
+                          decoration: p.card(radius: 16),
                           child: Row(
                             children: [
                               Container(
                                 width: 48,
                                 height: 48,
-                                decoration: const BoxDecoration(
-                                  color: AppColors.btnColor,
+                                decoration: BoxDecoration(
+                                  color: p.btnColor,
                                   shape: BoxShape.circle,
                                 ),
                                 child: const Icon(Icons.bluetooth, color: AppColors.primary),
@@ -146,7 +144,7 @@ class _BluetoothScreenState extends State<BluetoothScreen> {
                                     Text(d.name, style: const TextStyle(fontWeight: FontWeight.w700)),
                                     Text(
                                       d.connected ? 'Connected' : 'Not connected',
-                                      style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                                      style: TextStyle(color: p.textSecondary, fontSize: 12),
                                     ),
                                   ],
                                 ),

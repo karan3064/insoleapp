@@ -11,11 +11,11 @@ void main() {
     await tester.pumpWidget(
       ChangeNotifierProvider(
         create: (_) => app_auth.AuthProvider(),
-        child: const MaterialApp(home: Scaffold(body: Text('SoleSync'))),
+        child: const MaterialApp(home: Scaffold(body: Text('NurvoSync'))),
       ),
     );
 
-    expect(find.text('SoleSync'), findsOneWidget);
+    expect(find.text('NurvoSync'), findsOneWidget);
   });
 
   test('GaitAnalysis.calculateBalance is symmetric and bounded', () {

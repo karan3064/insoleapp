@@ -6,6 +6,7 @@ import '../models/insole_record.dart';
 import '../services/gait_analysis.dart';
 import '../state/insole_provider.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_palette.dart';
 import '../widgets/metric_card.dart';
 import '../widgets/page_header.dart';
 
@@ -28,6 +29,7 @@ class TrendsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final insole = context.watch<InsoleProvider>();
+    final p = context.palette;
 
     final days = _lastNDays(7, 0);
     final previousDays = _lastNDays(7, 7);
@@ -88,7 +90,7 @@ class TrendsScreen extends StatelessWidget {
             _ChartCard(title: 'Sessions (7d)', values: sessionCounts, labels: labels, color: AppColors.primary),
             const SizedBox(height: 20),
             _ChartCard(
-                title: 'Steps (7d)', values: stepCounts, labels: labels, color: AppColors.textSecondary),
+                title: 'Steps (7d)', values: stepCounts, labels: labels, color: p.textSecondary),
           ],
         ),
       ),
@@ -107,18 +109,15 @@ class _ChartCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final maxV = values.isEmpty ? 1 : values.reduce((a, b) => a > b ? a : b);
+    final p = context.palette;
 
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        border: Border.all(color: AppColors.border),
-        borderRadius: BorderRadius.circular(20),
-      ),
+      decoration: p.card(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: const TextStyle(color: AppColors.textSecondary)),
+          Text(title, style: TextStyle(color: p.textSecondary)),
           const SizedBox(height: 12),
           SizedBox(
             height: 160,
@@ -139,8 +138,7 @@ class _ChartCard extends StatelessWidget {
                         if (i < 0 || i >= labels.length) return const SizedBox.shrink();
                         return Padding(
                           padding: const EdgeInsets.only(top: 6),
-                          child: Text(labels[i],
-                              style: const TextStyle(color: AppColors.textSecondary, fontSize: 10)),
+                          child: Text(labels[i], style: TextStyle(color: p.textSecondary, fontSize: 10)),
                         );
                       },
                     ),

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../state/insole_provider.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_palette.dart';
 import '../widgets/page_header.dart';
 import 'detail_screen.dart';
 
@@ -13,6 +14,7 @@ class RecordsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final insole = context.watch<InsoleProvider>();
+    final p = context.palette;
 
     return Scaffold(
       body: SafeArea(
@@ -24,8 +26,8 @@ class RecordsScreen extends StatelessWidget {
               const PageHeader(title: 'Test records'),
               Expanded(
                 child: insole.list.isEmpty
-                    ? const Center(
-                        child: Text('No test data yet', style: TextStyle(color: AppColors.textSecondary)),
+                    ? Center(
+                        child: Text('No test data yet', style: TextStyle(color: p.textSecondary)),
                       )
                     : ListView.separated(
                         itemCount: insole.list.length,
@@ -39,11 +41,7 @@ class RecordsScreen extends StatelessWidget {
                             ),
                             child: Container(
                               padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: AppColors.surface,
-                                border: Border.all(color: AppColors.border),
-                                borderRadius: BorderRadius.circular(16),
-                              ),
+                              decoration: p.card(radius: 16),
                               child: Row(
                                 children: [
                                   Container(
@@ -59,11 +57,11 @@ class RecordsScreen extends StatelessWidget {
                                       children: [
                                         Text(record.name, style: const TextStyle(fontWeight: FontWeight.w700)),
                                         Text(record.date,
-                                            style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                                            style: TextStyle(color: p.textSecondary, fontSize: 12)),
                                       ],
                                     ),
                                   ),
-                                  const Icon(Icons.chevron_right, color: AppColors.textSecondary),
+                                  Icon(Icons.chevron_right, color: p.textSecondary),
                                 ],
                               ),
                             ),

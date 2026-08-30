@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/foot_point_layout.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_palette.dart';
 
 /// Renders one foot's live/replayed pressure grid, either as a heatmap
 /// (mirrors `components/insole/Heat/Heat.vue` + `RHeat.vue`) or as discrete
@@ -31,6 +32,7 @@ class FootPressureView extends StatelessWidget {
   Widget build(BuildContext context) {
     final points = isRight ? FootPointLayout.right : FootPointLayout.left;
     final colOffset = isRight ? 10 : 0;
+    final p = context.palette;
 
     final values = points
         .map((rc) => grid[rc[0]][rc[1]])
@@ -45,6 +47,9 @@ class FootPressureView extends StatelessWidget {
           colOffset: colOffset,
           values: values,
           heatMode: heatMode,
+          outlineFillColor: p.surface2,
+          outlineBorderColor: p.border,
+          zeroDotColor: p.textTertiary,
         ),
       ),
     );
@@ -56,12 +61,18 @@ class _FootPainter extends CustomPainter {
   final int colOffset;
   final List<int> values;
   final bool heatMode;
+  final Color outlineFillColor;
+  final Color outlineBorderColor;
+  final Color zeroDotColor;
 
   _FootPainter({
     required this.points,
     required this.colOffset,
     required this.values,
     required this.heatMode,
+    required this.outlineFillColor,
+    required this.outlineBorderColor,
+    required this.zeroDotColor,
   });
 
   Path _outline(Size size) {
@@ -108,10 +119,10 @@ class _FootPainter extends CustomPainter {
     final outline = _outline(size);
 
     final outlineFill = Paint()
-      ..color = AppColors.surface2
+      ..color = outlineFillColor
       ..style = PaintingStyle.fill;
     final outlineStroke = Paint()
-      ..color = AppColors.border
+      ..color = outlineBorderColor
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2;
 
@@ -148,7 +159,7 @@ class _FootPainter extends CustomPainter {
         final t = (v / maxValue).clamp(0.0, 1.0);
 
         final dotPaint = Paint()
-          ..color = v > 0 ? _rampColor(t) : AppColors.textTertiary.withValues(alpha: 0.35);
+          ..color = v > 0 ? _rampColor(t) : zeroDotColor.withValues(alpha: 0.35);
         final radius = v > 0 ? size.width * (0.05 + 0.05 * t) : size.width * 0.025;
         canvas.drawCircle(pos, radius, dotPaint);
       }
@@ -160,6 +171,9 @@ class _FootPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _FootPainter oldDelegate) {
     return heatMode != oldDelegate.heatMode ||
+        outlineFillColor != oldDelegate.outlineFillColor ||
+        outlineBorderColor != oldDelegate.outlineBorderColor ||
+        zeroDotColor != oldDelegate.zeroDotColor ||
         !_listEquals(values, oldDelegate.values);
   }
 

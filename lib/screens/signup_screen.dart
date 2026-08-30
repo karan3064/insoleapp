@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../state/auth_provider.dart';
 import '../state/insole_provider.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_palette.dart';
 
 /// Mirrors `pages/signup/signup.vue`.
 class SignupScreen extends StatefulWidget {
@@ -61,9 +62,11 @@ class _SignupScreenState extends State<SignupScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final p = context.palette;
+
     return Scaffold(
-      backgroundColor: AppColors.bg,
-      appBar: AppBar(backgroundColor: AppColors.bg, elevation: 0),
+      backgroundColor: p.bg,
+      appBar: AppBar(backgroundColor: p.bg, elevation: 0),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -104,7 +107,7 @@ class _SignupScreenState extends State<SignupScreen> {
                         ? const SizedBox(
                             height: 20,
                             width: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.bg),
+                            child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.onPrimary),
                           )
                         : const Text('Sign up'),
                   ),

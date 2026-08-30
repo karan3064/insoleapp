@@ -9,6 +9,7 @@ import '../state/auth_provider.dart';
 import '../state/ble_provider.dart';
 import '../state/insole_provider.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_palette.dart';
 import '../widgets/foot_line_chart.dart';
 import '../widgets/foot_pressure_view.dart';
 import 'detail_screen.dart';
@@ -56,6 +57,7 @@ class _GatherScreenState extends State<GatherScreen> {
   @override
   Widget build(BuildContext context) {
     final ble = context.watch<BleProvider>();
+    final p = context.palette;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Test')),
@@ -66,11 +68,7 @@ class _GatherScreenState extends State<GatherScreen> {
           children: [
             Container(
               padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                border: Border.all(color: AppColors.border),
-                borderRadius: BorderRadius.circular(20),
-              ),
+              decoration: p.card(),
               child: Column(
                 children: [
                   _ModeToggle(
@@ -95,14 +93,14 @@ class _GatherScreenState extends State<GatherScreen> {
                         margin: const EdgeInsets.only(right: 8),
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: ble.isCapturing ? AppColors.success : AppColors.textTertiary,
+                          color: ble.isCapturing ? AppColors.success : p.textTertiary,
                         ),
                       ),
                       Text(
                         ble.isCapturing
                             ? 'Recording ${FormatUtils.secondsToMinutesString(ble.elapsedSeconds)}'
                             : 'Not connected',
-                        style: const TextStyle(color: AppColors.textSecondary),
+                        style: TextStyle(color: p.textSecondary),
                       ),
                     ],
                   ),
@@ -130,7 +128,7 @@ class _GatherScreenState extends State<GatherScreen> {
                         polylineId: const PolylineId('path'),
                         color: AppColors.primary,
                         width: 4,
-                        points: ble.path.map((p) => LatLng(p.latitude, p.longitude)).toList(),
+                        points: ble.path.map((pt) => LatLng(pt.latitude, pt.longitude)).toList(),
                       ),
                     },
                     myLocationButtonEnabled: false,
@@ -159,6 +157,8 @@ class _ModeToggle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = context.palette;
+
     Widget segment(String label, bool active, VoidCallback onTap) {
       return Expanded(
         child: GestureDetector(
@@ -173,7 +173,7 @@ class _ModeToggle extends StatelessWidget {
             child: Text(
               label,
               style: TextStyle(
-                color: active ? AppColors.bg : AppColors.textSecondary,
+                color: active ? AppColors.onPrimary : p.textSecondary,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -184,8 +184,8 @@ class _ModeToggle extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.bg,
-        border: Border.all(color: AppColors.border),
+        color: p.bg,
+        border: Border.all(color: p.border),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Row(

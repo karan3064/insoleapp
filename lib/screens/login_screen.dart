@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../state/auth_provider.dart';
 import '../state/insole_provider.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_palette.dart';
 
 /// Mirrors `pages/login/login.vue`.
 class LoginScreen extends StatefulWidget {
@@ -55,8 +56,10 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final p = context.palette;
+
     return Scaffold(
-      backgroundColor: AppColors.bg,
+      backgroundColor: p.bg,
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -64,10 +67,10 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const CircleAvatar(
+                CircleAvatar(
                   radius: 44,
-                  backgroundColor: AppColors.surface,
-                  child: Icon(Icons.directions_walk, color: AppColors.primary, size: 44),
+                  backgroundColor: p.surface,
+                  child: const Icon(Icons.directions_walk, color: AppColors.primary, size: 44),
                 ),
                 const SizedBox(height: 24),
                 const Text('Welcome back',
@@ -97,7 +100,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         ? const SizedBox(
                             height: 20,
                             width: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.bg),
+                            child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.onPrimary),
                           )
                         : const Text('Log in'),
                   ),

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../services/health_calc.dart';
 import '../state/auth_provider.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_palette.dart';
 import '../widgets/page_header.dart';
 
 /// Mirrors `pages/my/my.vue`: profile fields used by the health
@@ -22,7 +23,7 @@ class ProfileScreen extends StatelessWidget {
     final result = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: AppColors.surface,
+        backgroundColor: context.palette.surface,
         title: Text(title),
         content: TextField(
           controller: controller,
@@ -49,7 +50,7 @@ class ProfileScreen extends StatelessWidget {
     final result = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: AppColors.surface,
+        backgroundColor: context.palette.surface,
         title: const Text('Name'),
         content: TextField(controller: controller, autofocus: true),
         actions: [
@@ -65,7 +66,7 @@ class ProfileScreen extends StatelessWidget {
   Future<void> _chooseSex(BuildContext context, AuthProvider auth) async {
     final value = await showModalBottomSheet<String>(
       context: context,
-      backgroundColor: AppColors.surface,
+      backgroundColor: context.palette.surface,
       builder: (context) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -100,6 +101,7 @@ class ProfileScreen extends StatelessWidget {
     final bmi = HealthCalc.calculateBMI(profile.weightKg, profile.heightCm);
     final bmiCategory = HealthCalc.bmiCategory(bmi);
     const sexLabels = {'male': 'Man', 'female': 'Woman', 'other': 'Other'};
+    final p = context.palette;
 
     return Scaffold(
       body: SafeArea(
@@ -110,10 +112,10 @@ class ProfileScreen extends StatelessWidget {
             Center(
               child: Column(
                 children: [
-                  const CircleAvatar(
+                  CircleAvatar(
                     radius: 44,
-                    backgroundColor: AppColors.surface,
-                    child: Icon(Icons.person, size: 44, color: AppColors.textSecondary),
+                    backgroundColor: p.surface,
+                    child: Icon(Icons.person, size: 44, color: p.textSecondary),
                   ),
                   const SizedBox(height: 16),
                   GestureDetector(
@@ -129,8 +131,7 @@ class ProfileScreen extends StatelessWidget {
                   ),
                   if (auth.uid != null) ...[
                     const SizedBox(height: 4),
-                    Text('UID: ${auth.uid}',
-                        style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                    Text('UID: ${auth.uid}', style: TextStyle(color: p.textSecondary, fontSize: 12)),
                   ],
                 ],
               ),
@@ -207,14 +208,12 @@ class _SettingsGroup extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = context.palette;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20),
-      decoration: BoxDecoration(
-        gradient: accent ? AppColors.gradOrange : null,
-        color: accent ? null : AppColors.surface,
-        border: accent ? null : Border.all(color: AppColors.border),
-        borderRadius: BorderRadius.circular(20),
-      ),
+      decoration: accent
+          ? BoxDecoration(gradient: AppColors.gradOrange, borderRadius: BorderRadius.circular(20))
+          : p.card(),
       child: Column(children: children),
     );
   }
@@ -230,17 +229,18 @@ class _SettingsRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = context.palette;
     return InkWell(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 16),
         decoration: BoxDecoration(
-          border: last ? null : const Border(bottom: BorderSide(color: AppColors.border)),
+          border: last ? null : Border(bottom: BorderSide(color: p.border)),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(label, style: const TextStyle(color: AppColors.textSecondary)),
+            Text(label, style: TextStyle(color: p.textSecondary)),
             Text(value, style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w600)),
           ],
         ),

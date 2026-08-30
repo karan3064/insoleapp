@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Solesync</string>
+	<string>NurvoSync</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -46,10 +46,10 @@
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>SoleSync uses Bluetooth to connect to your smart insoles.</string>
+	<string>NurvoSync uses Bluetooth to connect to your smart insoles.</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>
-	<string>SoleSync uses Bluetooth to connect to your smart insoles.</string>
+	<string>NurvoSync uses Bluetooth to connect to your smart insoles.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>SoleSync records your GPS path during a test to show distance and pace.</string>
+	<string>NurvoSync records your GPS path during a test to show distance and pace.</string>
 </dict>
 </plist>

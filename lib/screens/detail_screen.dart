@@ -12,6 +12,7 @@ import '../services/health_calc.dart';
 import '../state/auth_provider.dart';
 import '../state/insole_provider.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_palette.dart';
 import '../widgets/foot_line_chart.dart';
 import '../widgets/foot_pressure_view.dart';
 
@@ -87,10 +88,12 @@ class _DetailScreenState extends State<DetailScreen> {
   Widget build(BuildContext context) {
     final record = _record;
 
+    final p = context.palette;
+
     if (record == null) {
       return Scaffold(
         appBar: AppBar(title: const Text('Test detail')),
-        body: const Center(child: Text('Record not found', style: TextStyle(color: AppColors.textSecondary))),
+        body: Center(child: Text('Record not found', style: TextStyle(color: p.textSecondary))),
       );
     }
 
@@ -126,11 +129,7 @@ class _DetailScreenState extends State<DetailScreen> {
           children: [
             Container(
               padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                border: Border.all(color: AppColors.border),
-                borderRadius: BorderRadius.circular(20),
-              ),
+              decoration: p.card(),
               child: Column(
                 children: [
                   _ModeToggle(heatMode: _heatMode, onChanged: (v) => setState(() => _heatMode = v)),
@@ -161,7 +160,7 @@ class _DetailScreenState extends State<DetailScreen> {
                         ),
                       ),
                       Text(FormatUtils.secondsToMinutesString(_playhead),
-                          style: const TextStyle(color: AppColors.textSecondary)),
+                          style: TextStyle(color: p.textSecondary)),
                     ],
                   ),
                 ],
@@ -221,7 +220,7 @@ class _DetailScreenState extends State<DetailScreen> {
                         polylineId: const PolylineId('path'),
                         color: AppColors.primary,
                         width: 4,
-                        points: record.path.map((p) => LatLng(p.latitude, p.longitude)).toList(),
+                        points: record.path.map((pt) => LatLng(pt.latitude, pt.longitude)).toList(),
                       ),
                     },
                     myLocationButtonEnabled: false,
@@ -272,6 +271,7 @@ class _ProgressRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = context.palette;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -288,7 +288,7 @@ class _ProgressRow extends StatelessWidget {
           child: LinearProgressIndicator(
             value: (percent / 100).clamp(0, 1).toDouble(),
             minHeight: 8,
-            backgroundColor: AppColors.surface2,
+            backgroundColor: p.surface2,
             color: AppColors.primary,
           ),
         ),
@@ -304,11 +304,12 @@ class _LRRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = context.palette;
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text('Left foot: $left', style: const TextStyle(color: AppColors.textSecondary)),
-        Text('Right foot: $right', style: const TextStyle(color: AppColors.textSecondary)),
+        Text('Left foot: $left', style: TextStyle(color: p.textSecondary)),
+        Text('Right foot: $right', style: TextStyle(color: p.textSecondary)),
       ],
     );
   }
@@ -321,11 +322,12 @@ class _StatBox extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = context.palette;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 12),
       child: Column(
         children: [
-          Text(label, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+          Text(label, style: TextStyle(color: p.textSecondary, fontSize: 12)),
           const SizedBox(height: 4),
           Text(value, style: const TextStyle(fontWeight: FontWeight.w700)),
         ],
@@ -355,7 +357,7 @@ class _AverageTable extends StatelessWidget {
         ]);
 
     return Table(
-      border: TableBorder.all(color: AppColors.border),
+      border: TableBorder.all(color: context.palette.border),
       columnWidths: const {0: FlexColumnWidth(2), 1: FlexColumnWidth(1), 2: FlexColumnWidth(1)},
       children: [
         const TableRow(children: [
@@ -379,6 +381,8 @@ class _ModeToggle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = context.palette;
+
     Widget segment(String label, bool active, VoidCallback onTap) {
       return Expanded(
         child: GestureDetector(
@@ -393,7 +397,7 @@ class _ModeToggle extends StatelessWidget {
             child: Text(
               label,
               style: TextStyle(
-                color: active ? AppColors.bg : AppColors.textSecondary,
+                color: active ? AppColors.onPrimary : p.textSecondary,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -404,8 +408,8 @@ class _ModeToggle extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.bg,
-        border: Border.all(color: AppColors.border),
+        color: p.bg,
+        border: Border.all(color: p.border),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Row(

@@ -2,7 +2,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
 import '../models/foot_line_data.dart';
-import '../theme/app_colors.dart';
+import '../theme/app_palette.dart';
 
 /// 16-series pressure-over-time line chart, mirroring
 /// `components/insole/line/line.vue` (live, last-10-points) and
@@ -28,6 +28,7 @@ class FootLineChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = context.palette;
     final series = <List<FlSpot>>[];
     var maxLen = 0;
 
@@ -45,8 +46,8 @@ class FootLineChart extends StatelessWidget {
     if (maxLen == 0) {
       return SizedBox(
         height: height,
-        child: const Center(
-          child: Text('No data yet', style: TextStyle(color: AppColors.textTertiary)),
+        child: Center(
+          child: Text('No data yet', style: TextStyle(color: p.textTertiary)),
         ),
       );
     }
@@ -60,7 +61,7 @@ class FootLineChart extends StatelessWidget {
           gridData: FlGridData(
             show: true,
             drawVerticalLine: false,
-            getDrawingHorizontalLine: (_) => FlLine(color: AppColors.border, strokeWidth: 1),
+            getDrawingHorizontalLine: (_) => FlLine(color: p.border, strokeWidth: 1),
           ),
           borderData: FlBorderData(show: false),
           titlesData: FlTitlesData(
@@ -73,7 +74,7 @@ class FootLineChart extends StatelessWidget {
                 reservedSize: 32,
                 getTitlesWidget: (value, meta) => Text(
                   value.toInt().toString(),
-                  style: const TextStyle(color: AppColors.textSecondary, fontSize: 10),
+                  style: TextStyle(color: p.textSecondary, fontSize: 10),
                 ),
               ),
             ),

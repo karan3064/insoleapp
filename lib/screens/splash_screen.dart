@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../state/auth_provider.dart';
 import '../state/insole_provider.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_palette.dart';
 
 /// Mirrors `pages/splash/splash.vue`: boots local state, resolves whether
 /// the user is already logged in, and routes accordingly.
@@ -53,17 +54,18 @@ class _SplashScreenState extends State<SplashScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      backgroundColor: AppColors.bg,
+    final p = context.palette;
+    return Scaffold(
+      backgroundColor: p.bg,
       body: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.directions_walk, color: AppColors.primary, size: 72),
-            SizedBox(height: 16),
+            const Icon(Icons.directions_walk, color: AppColors.primary, size: 72),
+            const SizedBox(height: 16),
             Text(
-              'SoleSync',
-              style: TextStyle(color: AppColors.text, fontSize: 28, fontWeight: FontWeight.w700),
+              'NurvoSync',
+              style: TextStyle(color: p.text, fontSize: 28, fontWeight: FontWeight.w700),
             ),
           ],
         ),

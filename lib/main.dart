@@ -23,11 +23,11 @@ Future<void> main() async {
     debugPrint('Firebase init skipped/failed: $e');
   }
 
-  runApp(const SoleSyncApp());
+  runApp(const NurvoSyncApp());
 }
 
-class SoleSyncApp extends StatelessWidget {
-  const SoleSyncApp({super.key});
+class NurvoSyncApp extends StatelessWidget {
+  const NurvoSyncApp({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -38,11 +38,11 @@ class SoleSyncApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => BleProvider()),
       ],
       child: MaterialApp(
-        title: 'SoleSync',
+        title: 'NurvoSync',
         debugShowCheckedModeBanner: false,
-        theme: AppTheme.dark,
+        theme: AppTheme.light,
         darkTheme: AppTheme.dark,
-        themeMode: ThemeMode.dark,
+        themeMode: ThemeMode.system,
         initialRoute: '/splash',
         routes: {
           '/splash': (_) => const SplashScreen(),

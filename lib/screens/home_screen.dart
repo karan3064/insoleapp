@@ -8,6 +8,7 @@ import '../state/auth_provider.dart';
 import '../state/ble_provider.dart';
 import '../state/insole_provider.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_palette.dart';
 import '../widgets/activity_rings.dart';
 import '../widgets/foot_line_chart.dart';
 import '../widgets/metric_card.dart';
@@ -65,6 +66,7 @@ class HomeScreen extends StatelessWidget {
     final calorieGoal = 500;
     final stepsPercent = sCount == 0 ? 0.0 : (sCount / stepGoal * 100).clamp(0, 100).toDouble();
     final caloriePercent = calorie == 0 ? 0.0 : (calorie / calorieGoal * 100).clamp(0, 100).toDouble();
+    final p = context.palette;
 
     return Scaffold(
       body: SafeArea(
@@ -78,40 +80,35 @@ class HomeScreen extends StatelessWidget {
                   profile.displayName != null ? 'Hello, ${profile.displayName}' : 'Hello there',
                   style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w700),
                 ),
-                const CircleAvatar(
+                CircleAvatar(
                   radius: 22,
-                  backgroundColor: AppColors.surface,
-                  child: Icon(Icons.person, color: AppColors.textSecondary),
+                  backgroundColor: p.surface,
+                  child: Icon(Icons.person, color: p.textSecondary),
                 ),
               ],
             ),
             const SizedBox(height: 24),
             Container(
               padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                border: Border.all(color: AppColors.border),
-                borderRadius: BorderRadius.circular(20),
-              ),
+              decoration: p.card(),
               child: Column(
                 children: [
                   ActivityRings(
                     size: 200,
                     rings: [
-                      RingSpec(percent: stepsPercent, color: AppColors.primary, trackColor: AppColors.surface2),
-                      RingSpec(percent: caloriePercent, color: AppColors.warning, trackColor: AppColors.surface2),
+                      RingSpec(percent: stepsPercent, color: AppColors.primary, trackColor: p.surface2),
+                      RingSpec(percent: caloriePercent, color: AppColors.warning, trackColor: p.surface2),
                       RingSpec(
                           percent: balancePercent.toDouble(),
                           color: const Color(0xFF60A5FA),
-                          trackColor: AppColors.surface2),
+                          trackColor: p.surface2),
                     ],
                     center: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text('$sCount',
                             style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w700)),
-                        const Text('steps today',
-                            style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                        Text('steps today', style: TextStyle(color: p.textSecondary, fontSize: 12)),
                       ],
                     ),
                   ),
@@ -229,7 +226,7 @@ class _Stat extends StatelessWidget {
         Container(width: 10, height: 10, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
         const SizedBox(height: 6),
         Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
-        Text(label, style: const TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+        Text(label, style: TextStyle(color: context.palette.textSecondary, fontSize: 11)),
       ],
     );
   }
@@ -250,16 +247,13 @@ class _ActionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = context.palette;
     return InkWell(
       borderRadius: BorderRadius.circular(20),
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          border: Border.all(color: AppColors.border),
-          borderRadius: BorderRadius.circular(20),
-        ),
+        decoration: p.card(),
         child: Row(
           children: [
             Container(
@@ -285,6 +279,7 @@ class _RecentDataCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final stepCount = GaitAnalysis.processFrames(record.details);
+    final p = context.palette;
 
     return InkWell(
       borderRadius: BorderRadius.circular(20),
@@ -293,19 +288,15 @@ class _RecentDataCard extends StatelessWidget {
       ),
       child: Container(
         padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          border: Border.all(color: AppColors.border),
-          borderRadius: BorderRadius.circular(20),
-        ),
+        decoration: p.card(),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('Recent insole data', style: TextStyle(color: AppColors.textSecondary)),
-                const Icon(Icons.chevron_right, color: AppColors.textSecondary),
+                Text('Recent insole data', style: TextStyle(color: p.textSecondary)),
+                Icon(Icons.chevron_right, color: p.textSecondary),
               ],
             ),
             const SizedBox(height: 8),
@@ -324,15 +315,12 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final p = context.palette;
     return Container(
       padding: const EdgeInsets.all(32),
       alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        border: Border.all(color: AppColors.border),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: const Text('No test data yet', style: TextStyle(color: AppColors.textSecondary)),
+      decoration: p.card(),
+      child: Text('No test data yet', style: TextStyle(color: p.textSecondary)),
     );
   }
 }

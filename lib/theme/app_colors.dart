@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
-/// Design tokens ported 1:1 from the Vue app's `styles/global.scss`.
+/// Brand/semantic tokens that stay the same in both light and dark mode.
+/// Backgrounds, text, borders, and card surfaces flip between themes --
+/// see [AppPalette] / `context.palette` for those.
 class AppColors {
   AppColors._();
 
@@ -14,20 +16,10 @@ class AppColors {
   static const warning = Color(0xFFFBBF24);
   static const error = Color(0xFFF87171);
 
-  // Background
-  static const bg = Color(0xFF0F1720);
-  static const surface = Color(0xFF182430);
-  static const surface2 = Color(0xFF1F2E3B);
-
-  // Text
-  static const text = Color(0xFFFFFFFF);
-  static const textSecondary = Color(0xFF92B7C9);
-  static const textTertiary = Color(0xFF5B7A8C);
-
-  // Border
-  static const border = Color(0xFF263542);
-
-  static const btnColor = Color(0xFF233C48);
+  /// Text/icon color for content drawn directly on top of [primary] --
+  /// teal is bright enough in both themes that a dark color always reads
+  /// best on it, so this doesn't flip with light/dark mode.
+  static const onPrimary = Color(0xFF0F1720);
 
   // Gradients (Samsung Health style cards)
   static const gradBlue = LinearGradient(

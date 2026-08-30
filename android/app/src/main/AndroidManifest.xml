@@ -14,7 +14,7 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
 
     <application
-        android:label="solesync"
+        android:label="NurvoSync"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <!--
