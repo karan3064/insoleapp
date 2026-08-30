@@ -84,7 +84,9 @@ class _FootPainter extends CustomPainter {
 
   Offset _pointPos(Size size, int row, int col) {
     final x = (col - colOffset) / FootPointLayout.maxCol;
-    final y = (row - FootPointLayout.minRow) / FootPointLayout.maxRow;
+    // Row 0 is the forefoot (toes) and row 19 is the heel, but toes should
+    // render at the top of the widget -- so invert the row axis.
+    final y = 1 - (row - FootPointLayout.minRow) / FootPointLayout.maxRow;
     // Keep points comfortably inside the silhouette.
     final margin = size.width * 0.12;
     final px = margin + x * (size.width - margin * 2);
