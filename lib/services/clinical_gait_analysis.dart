@@ -1,7 +1,6 @@
 import 'dart:math';
 
 import '../models/foot_line_data.dart';
-import '../models/insole_record.dart';
 import '../models/pressure_frame.dart';
 
 /// One foot's stance phase: from heel-strike (pressure rises above the
@@ -46,6 +45,23 @@ class FootGaitMetrics {
 
   double? get stanceTimeMeanMs => ClinicalGaitAnalysis._mean(stanceTimesMs);
   double? get swingTimeMeanMs => ClinicalGaitAnalysis._mean(swingTimesMs);
+
+  /// Only the step count and stride/stance/swing time lists are kept --
+  /// small (bounded by step count, not by session length) and enough to
+  /// recompute every derived getter above without re-running detection.
+  Map<String, dynamic> toJson() => {
+        'stepCount': stepCount,
+        'strideTimesMs': strideTimesMs,
+        'stanceTimesMs': stanceTimesMs,
+        'swingTimesMs': swingTimesMs,
+      };
+
+  factory FootGaitMetrics.fromJson(Map<String, dynamic> json) => FootGaitMetrics(
+        stepCount: (json['stepCount'] as num).toInt(),
+        strideTimesMs: (json['strideTimesMs'] as List).map((v) => (v as num).toDouble()).toList(),
+        stanceTimesMs: (json['stanceTimesMs'] as List).map((v) => (v as num).toDouble()).toList(),
+        swingTimesMs: (json['swingTimesMs'] as List).map((v) => (v as num).toDouble()).toList(),
+      );
 }
 
 /// Full clinical gait-metrics report for one recorded session.
@@ -79,6 +95,39 @@ class ClinicalGaitReport {
     required this.strideTimeAsymmetryPercent,
     required this.stanceTimeAsymmetryPercent,
   });
+
+  Map<String, dynamic> toJson() => {
+        'left': left.toJson(),
+        'right': right.toJson(),
+        'cadenceStepsPerMin': cadenceStepsPerMin,
+        'doubleSupportPercent': doubleSupportPercent,
+        'singleSupportPercent': singleSupportPercent,
+        'strideTimeAsymmetryPercent': strideTimeAsymmetryPercent,
+        'stanceTimeAsymmetryPercent': stanceTimeAsymmetryPercent,
+      };
+
+  factory ClinicalGaitReport.fromJson(Map<String, dynamic> json) => ClinicalGaitReport(
+        left: FootGaitMetrics.fromJson(Map<String, dynamic>.from(json['left'] as Map)),
+        right: FootGaitMetrics.fromJson(Map<String, dynamic>.from(json['right'] as Map)),
+        cadenceStepsPerMin: (json['cadenceStepsPerMin'] as num?)?.toDouble(),
+        doubleSupportPercent: (json['doubleSupportPercent'] as num?)?.toDouble(),
+        singleSupportPercent: (json['singleSupportPercent'] as num?)?.toDouble(),
+        strideTimeAsymmetryPercent: (json['strideTimeAsymmetryPercent'] as num?)?.toDouble(),
+        stanceTimeAsymmetryPercent: (json['stanceTimeAsymmetryPercent'] as num?)?.toDouble(),
+      );
+
+  /// A report with no detected steps -- used when there's no frame data
+  /// to analyze (e.g. a record synced from another device with no local
+  /// frame file available).
+  static final empty = ClinicalGaitReport(
+    left: FootGaitMetrics(stepCount: 0, strideTimesMs: [], stanceTimesMs: [], swingTimesMs: []),
+    right: FootGaitMetrics(stepCount: 0, strideTimesMs: [], stanceTimesMs: [], swingTimesMs: []),
+    cadenceStepsPerMin: null,
+    doubleSupportPercent: null,
+    singleSupportPercent: null,
+    strideTimeAsymmetryPercent: null,
+    stanceTimeAsymmetryPercent: null,
+  );
 }
 
 /// Detects real gait events (heel-strike / toe-off) from the insole's
@@ -102,9 +151,13 @@ class ClinicalGaitAnalysis {
   /// the threshold already used by `GaitAnalysis.analyzeFlightAndContact`.
   static const contactThreshold = 10;
 
-  static ClinicalGaitReport analyze(InsoleRecord record) {
-    final leftSeries = _footPressureSeries(record.line, record.details);
-    final rightSeries = _footPressureSeries(record.rightLine, record.details);
+  static ClinicalGaitReport analyze({
+    required FootLineData line,
+    required FootLineData rightLine,
+    required List<PressureFrame> details,
+  }) {
+    final leftSeries = _footPressureSeries(line, details);
+    final rightSeries = _footPressureSeries(rightLine, details);
 
     final leftStances = _stanceIntervals(leftSeries);
     final rightStances = _stanceIntervals(rightSeries);
@@ -112,7 +165,7 @@ class ClinicalGaitAnalysis {
     final left = _footMetrics(leftStances);
     final right = _footMetrics(rightStances);
 
-    final durationMs = _durationMs(record.details);
+    final durationMs = _durationMs(details);
 
     final doubleSupportMs = _overlapMs(leftStances, rightStances);
     final leftStanceMs = leftStances.fold<int>(0, (sum, s) => sum + s.durationMs);

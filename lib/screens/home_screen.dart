@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../models/foot_line_data.dart';
+import '../models/foot_point_layout.dart';
 import '../models/insole_record.dart';
-import '../services/gait_analysis.dart';
 import '../services/health_calc.dart';
+import '../services/session_file_store.dart';
 import '../state/auth_provider.dart';
 import '../state/ble_provider.dart';
 import '../state/insole_provider.dart';
@@ -33,8 +35,6 @@ class HomeScreen extends StatelessWidget {
 
     int sCount = 0;
     int calorie = 0;
-    double lFoot = 0;
-    double rFoot = 0;
     int balancePercent = 0;
     int cadence = 0;
     int groundContactMs = 0;
@@ -42,24 +42,14 @@ class HomeScreen extends StatelessWidget {
     String archLabel = '';
 
     if (latest != null) {
-      sCount = GaitAnalysis.processFrames(latest.details);
+      final summary = latest.summary;
+      sCount = summary.stepCount;
       calorie = HealthCalc.calculateCalories(latest.distanceKm, profile.weightKg);
-
-      const allKeys = [
-        'data', 'data2', 'data3', 'data4', 'data5', 'data6', 'data7', 'data8',
-        'data9', 'data10', 'data11', 'data12', 'data13', 'data14', 'data15', 'data16',
-      ];
-      lFoot = GaitAnalysis.calculateAverage(latest.line, allKeys);
-      rFoot = GaitAnalysis.calculateAverage(latest.rightLine, allKeys);
-      balancePercent = GaitAnalysis.calculateBalance(lFoot, rFoot);
-      cadence = GaitAnalysis.calculateCadence(sCount, latest.time);
-
-      final truncated = GaitAnalysis.truncateToSevenCols(latest.details);
-      groundContactMs = GaitAnalysis.analyzeFlightAndContact(truncated).totalGround;
-
-      final fp = GaitAnalysis.footprint(latest.line, latest.rightLine);
-      footprintLabel = fp.footprintLeft;
-      archLabel = fp.archLeft;
+      balancePercent = summary.balancePercent;
+      cadence = summary.cadenceSpm;
+      groundContactMs = summary.groundContactMs;
+      footprintLabel = summary.footprintLeft;
+      archLabel = summary.archLeft;
     }
 
     final stepGoal = 6000;
@@ -271,20 +261,54 @@ class _ActionCard extends StatelessWidget {
   }
 }
 
-class _RecentDataCard extends StatelessWidget {
+class _RecentDataCard extends StatefulWidget {
   final InsoleRecord record;
 
   const _RecentDataCard({required this.record});
 
   @override
+  State<_RecentDataCard> createState() => _RecentDataCardState();
+}
+
+class _RecentDataCardState extends State<_RecentDataCard> {
+  static final _fileStore = SessionFileStore();
+  FootLineData? _line;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadLine();
+  }
+
+  @override
+  void didUpdateWidget(_RecentDataCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.record.id != widget.record.id) {
+      _line = null;
+      _loadLine();
+    }
+  }
+
+  Future<void> _loadLine() async {
+    // The full waveform is loaded from this session's local frame file --
+    // never eagerly held on `InsoleRecord` itself, so the dashboard stays
+    // cheap regardless of how long the session ran.
+    final path = widget.record.framesFilePath;
+    if (path == null) return;
+    final frames = await _fileStore.readFramesAtPath(path);
+    if (!mounted) return;
+    setState(() => _line = FootLineData.fromFrames(frames, FootPointLayout.left));
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final stepCount = GaitAnalysis.processFrames(record.details);
     final p = context.palette;
+    final line = _line;
 
     return InkWell(
       borderRadius: BorderRadius.circular(20),
       onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => DetailScreen(recordId: record.id)),
+        MaterialPageRoute(builder: (_) => DetailScreen(recordId: widget.record.id)),
       ),
       child: Container(
         padding: const EdgeInsets.all(16),
@@ -300,9 +324,13 @@ class _RecentDataCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 8),
-            Text('Steps: $stepCount', style: const TextStyle(fontWeight: FontWeight.w700)),
+            Text('Steps: ${widget.record.summary.stepCount}',
+                style: const TextStyle(fontWeight: FontWeight.w700)),
             const SizedBox(height: 12),
-            FootLineChart(data: record.line, windowSize: null, height: 100),
+            if (line == null)
+              const SizedBox(height: 100)
+            else
+              FootLineChart(data: line, windowSize: null, height: 100),
           ],
         ),
       ),

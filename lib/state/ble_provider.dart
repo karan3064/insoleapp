@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
@@ -6,11 +7,14 @@ import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../models/foot_line_data.dart';
+import '../models/foot_point_layout.dart';
 import '../models/insole_device.dart';
 import '../models/insole_record.dart';
 import '../models/pressure_frame.dart';
+import '../models/record_summary.dart';
 import '../models/track_point.dart';
 import '../services/insole_frame_parser.dart';
+import '../services/session_file_store.dart';
 
 /// Same service/characteristic UUIDs used by the Vue app's
 /// `pages/bluetooth/bluetooth.vue`.
@@ -20,6 +24,12 @@ final _characteristicUuid = Guid('0000ee02-0000-1000-8000-00805f9b34fb');
 /// Owns the BLE connection(s) to the insole(s), decodes live pressure data,
 /// and accumulates a test session's replay data / GPS path -- mirroring
 /// `pages/bluetooth/bluetooth.vue` + `chart/gather/gather.vue` combined.
+///
+/// Capture can run for hours (there's no "stop test" step -- see
+/// [isCapturing]), so raw per-frame data is streamed straight to a local
+/// file as it arrives instead of being held in a growing in-memory list;
+/// only a bounded recent window is kept resident for the live UI. See
+/// `SessionFileStore` and `RecordSummary` for the other half of this.
 class BleProvider extends ChangeNotifier {
   final List<InsoleDevice> discovered = [];
   final List<InsoleDevice> connectedDevices = [];
@@ -40,9 +50,18 @@ class BleProvider extends ChangeNotifier {
   /// Live 21x17 pressure grid, updated as data streams in.
   List<List<int>> grid = emptyGrid();
 
+  /// Recent-only per-foot pressure series, for the live waveform chart.
+  /// Capped at [_liveWindowSize] samples -- full-fidelity history for a
+  /// saved session is reconstructed from its frame file on demand (see
+  /// `FootLineData.fromFrames`), not kept resident here for a session's
+  /// whole duration.
   FootLineData leftLine = FootLineData();
   FootLineData rightLine = FootLineData();
-  final List<PressureFrame> _frames = [];
+  static const _liveWindowSize = 200;
+
+  IOSink? _frameSink;
+  String? _framesFilePath;
+  final _fileStore = SessionFileStore();
 
   final List<TrackPoint> path = [];
   double totalDistanceKm = 0;
@@ -192,7 +211,7 @@ class BleProvider extends ChangeNotifier {
     connectedDevices.removeWhere((d) => d.id == insole.id);
 
     if (connectedDevices.length < 2) {
-      _stopCapture();
+      await _stopCapture();
     }
 
     notifyListeners();
@@ -214,10 +233,24 @@ class BleProvider extends ChangeNotifier {
     if (isCapturing) {
       leftLine.push(frame.leftPoints);
       rightLine.push(frame.rightPoints);
+      _trimLiveWindow(leftLine);
+      _trimLiveWindow(rightLine);
+
       final elapsedMs = _testStartTime == null
           ? 0
           : DateTime.now().difference(_testStartTime!).inMilliseconds;
-      _frames.add(PressureFrame(time: elapsedMs, item: frame.grid));
+      final sink = _frameSink;
+      if (sink != null) {
+        _fileStore.writeFrame(sink, PressureFrame(time: elapsedMs, item: frame.grid));
+      }
+    }
+  }
+
+  static void _trimLiveWindow(FootLineData data) {
+    for (final series in data.series) {
+      if (series.length > _liveWindowSize) {
+        series.removeRange(0, series.length - _liveWindowSize);
+      }
     }
   }
 
@@ -228,6 +261,7 @@ class BleProvider extends ChangeNotifier {
     isCapturing = true;
     _resetAccumulators();
     _testStartTime = DateTime.now();
+    await _openFrameFile();
 
     _testTimer?.cancel();
     _testTimer = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -240,10 +274,19 @@ class BleProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void _stopCapture() {
+  Future<void> _openFrameFile() async {
+    final sessionKey = DateTime.now().millisecondsSinceEpoch;
+    _frameSink = await _fileStore.openWriter(sessionKey);
+    _framesFilePath = (await _fileStore.fileFor(sessionKey)).path;
+  }
+
+  Future<void> _stopCapture() async {
     isCapturing = false;
     _testTimer?.cancel();
     _positionSub?.cancel();
+    await _frameSink?.flush();
+    await _frameSink?.close();
+    _frameSink = null;
   }
 
   void _resetAccumulators() {
@@ -251,7 +294,6 @@ class BleProvider extends ChangeNotifier {
     grid = emptyGrid();
     leftLine = FootLineData();
     rightLine = FootLineData();
-    _frames.clear();
     path.clear();
     totalDistanceKm = 0;
     _parser.reset();
@@ -300,20 +342,50 @@ class BleProvider extends ChangeNotifier {
   /// uninterrupted -- no reconnect, no re-arming a "test mode" needed to
   /// record the next session. [id] should be the next sequential record id
   /// (mirrors `insole.list.length + 1`).
-  InsoleRecord saveSession(int id, String deviceName) {
+  ///
+  /// Closes out this segment's frame file, reads it back once to compute
+  /// the session's [RecordSummary] (step count, footprint, clinical gait
+  /// metrics, ...), then opens a fresh file for the next segment. The
+  /// returned record carries that summary plus a pointer to the frame
+  /// file -- never the raw frames themselves.
+  Future<InsoleRecord> saveSession(int id, String deviceName) async {
     final totalTimeMin = _testStartTime == null
         ? 0
         : (DateTime.now().difference(_testStartTime!).inSeconds / 60).round();
     final pace = totalDistanceKm > 0 ? (totalTimeMin / totalDistanceKm).round() : 0;
+
+    // Detach the sink before any `await` below -- `_onData` checks
+    // `_frameSink` on every incoming frame, so nulling it out synchronously
+    // (rather than after closing) means a frame arriving during this
+    // close-and-reopen gap is just skipped, never written to a sink that's
+    // in the middle of closing.
+    final sink = _frameSink;
+    final framesFilePath = _framesFilePath;
+    _frameSink = null;
+    await sink?.flush();
+    await sink?.close();
+
+    List<PressureFrame> details = const [];
+    if (framesFilePath != null) {
+      details = await _fileStore.readFramesAtPath(framesFilePath);
+    }
+    final line = FootLineData.fromFrames(details, FootPointLayout.left);
+    final rightFull = FootLineData.fromFrames(details, FootPointLayout.right);
+
+    final summary = RecordSummary.compute(
+      details: details,
+      line: line,
+      rightLine: rightFull,
+      elapsedSeconds: elapsedSeconds,
+    );
 
     final record = InsoleRecord(
       id: id,
       name: deviceName,
       date: _formattedNow(),
       time: elapsedSeconds,
-      details: List.of(_frames),
-      line: leftLine,
-      rightLine: rightLine,
+      summary: summary,
+      framesFilePath: framesFilePath,
       distanceKm: totalDistanceKm,
       pace: pace,
       totalTime: totalTimeMin,
@@ -323,6 +395,7 @@ class BleProvider extends ChangeNotifier {
     if (isCapturing) {
       _resetAccumulators();
       _testStartTime = DateTime.now();
+      await _openFrameFile();
     }
 
     return record;
@@ -342,6 +415,7 @@ class BleProvider extends ChangeNotifier {
     }
     _testTimer?.cancel();
     _positionSub?.cancel();
+    _frameSink?.close();
     super.dispose();
   }
 }

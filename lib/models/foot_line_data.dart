@@ -1,3 +1,5 @@
+import 'pressure_frame.dart';
+
 /// The 16 named pressure-point time series per foot, mirroring the Vue
 /// `line.vue` / `RightLine.vue` components (`data`..`data16`).
 ///
@@ -10,6 +12,26 @@ class FootLineData {
 
   FootLineData({List<List<int>>? series})
       : series = series ?? List.generate(16, (_) => <int>[]);
+
+  /// Rebuilds a foot's 16-point series from full 21x17 grid frames, using
+  /// [FootPointLayout] to know which grid cell each point lives at. This
+  /// lets `line`/`rightLine` be derived on demand from the saved frame
+  /// file instead of being captured and stored separately -- the grid
+  /// already contains every value a `FootLineData` needs.
+  factory FootLineData.fromFrames(List<PressureFrame> frames, List<List<int>> layout) {
+    final series = List.generate(16, (_) => List<int>.filled(frames.length, 0));
+    for (var f = 0; f < frames.length; f++) {
+      final grid = frames[f].item;
+      for (var i = 0; i < layout.length; i++) {
+        final row = layout[i][0];
+        final col = layout[i][1];
+        if (row < grid.length && col < grid[row].length) {
+          series[i][f] = grid[row][col];
+        }
+      }
+    }
+    return FootLineData(series: series);
+  }
 
   static const List<String> keys = [
     'data', 'data2', 'data3', 'data4', 'data5', 'data6', 'data7', 'data8',

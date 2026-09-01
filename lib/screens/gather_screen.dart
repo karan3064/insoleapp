@@ -39,7 +39,7 @@ class _GatherScreenState extends State<GatherScreen> {
     final auth = context.read<AuthProvider>();
 
     final deviceName = ble.connectedDevices.isNotEmpty ? ble.connectedDevices.first.name : 'Insole';
-    final record = ble.saveSession(insole.nextId, deviceName);
+    final record = await ble.saveSession(insole.nextId, deviceName);
 
     await insole.saveRecord(record);
     unawaited(insole.syncRecord(auth.uid, record));

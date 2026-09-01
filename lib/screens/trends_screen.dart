@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models/insole_record.dart';
-import '../services/gait_analysis.dart';
 import '../state/insole_provider.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_palette.dart';
@@ -24,7 +23,7 @@ class TrendsScreen extends StatelessWidget {
     return days;
   }
 
-  int _stepsFor(InsoleRecord record) => GaitAnalysis.processFrames(record.details);
+  int _stepsFor(InsoleRecord record) => record.summary.stepCount;
 
   @override
   Widget build(BuildContext context) {

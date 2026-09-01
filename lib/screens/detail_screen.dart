@@ -8,14 +8,16 @@ import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../models/foot_line_data.dart';
+import '../models/foot_point_layout.dart';
 import '../models/insole_record.dart';
 import '../models/pressure_frame.dart';
+import '../models/record_summary.dart';
 import '../models/user_profile.dart';
-import '../services/clinical_gait_analysis.dart';
 import '../services/clinical_report_service.dart';
 import '../services/format_utils.dart';
-import '../services/gait_analysis.dart';
 import '../services/health_calc.dart';
+import '../services/session_file_store.dart';
 import '../state/auth_provider.dart';
 import '../state/insole_provider.dart';
 import '../theme/app_colors.dart';
@@ -44,14 +46,29 @@ class _DetailScreenState extends State<DetailScreen> {
 
   InsoleRecord? _record;
 
-  static const _frontKeys = ['data', 'data2', 'data3', 'data4', 'data5', 'data6', 'data7', 'data8'];
-  static const _midKeys = ['data9', 'data10', 'data11', 'data12', 'data13', 'data14'];
-  static const _rearKeys = ['data15', 'data16'];
+  /// Raw per-frame data, loaded once from this session's local file --
+  /// null until that load completes. Only the playback scrubber and the
+  /// two full waveform charts need this; every other stat on this screen
+  /// reads `record.summary`, which was computed once at save time and
+  /// needs no frame data at all.
+  List<PressureFrame>? _frames;
+  final _fileStore = SessionFileStore();
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _record ??= context.read<InsoleProvider>().byId(widget.recordId);
+    if (_record == null) {
+      _record = context.read<InsoleProvider>().byId(widget.recordId);
+      _loadFrames();
+    }
+  }
+
+  Future<void> _loadFrames() async {
+    final path = _record?.framesFilePath;
+    if (path == null) return;
+    final frames = await _fileStore.readFramesAtPath(path);
+    if (!mounted) return;
+    setState(() => _frames = frames);
   }
 
   @override
@@ -62,7 +79,8 @@ class _DetailScreenState extends State<DetailScreen> {
 
   void _play() {
     final record = _record;
-    if (record == null || record.details.isEmpty) return;
+    final frames = _frames;
+    if (record == null || frames == null || frames.isEmpty) return;
 
     setState(() {
       _playing = true;
@@ -75,7 +93,7 @@ class _DetailScreenState extends State<DetailScreen> {
         _stop();
         return;
       }
-      final grid = _gridAtSecond(record, _playhead);
+      final grid = _gridAtSecond(frames, _playhead);
       setState(() {
         if (grid != null) _grid = grid;
         _playhead++;
@@ -84,12 +102,12 @@ class _DetailScreenState extends State<DetailScreen> {
   }
 
   /// The most recent captured frame at or before [second], since frames
-  /// arrive at an uneven real-time rate (not one-per-second) -- `details`
+  /// arrive at an uneven real-time rate (not one-per-second) -- `frames`
   /// is sorted ascending by `time` (ms since session start).
-  List<List<int>>? _gridAtSecond(InsoleRecord record, int second) {
+  List<List<int>>? _gridAtSecond(List<PressureFrame> frames, int second) {
     final ms = second * 1000;
     List<List<int>>? result;
-    for (final f in record.details) {
+    for (final f in frames) {
       if (f.time > ms) break;
       result = f.item;
     }
@@ -110,7 +128,7 @@ class _DetailScreenState extends State<DetailScreen> {
 
   Future<void> _showExportSheet(
     InsoleRecord record,
-    ClinicalGaitReport gait,
+    RecordSummary summary,
     UserProfile profile,
     String? email,
   ) async {
@@ -126,7 +144,7 @@ class _DetailScreenState extends State<DetailScreen> {
               subtitle: const Text('For printing or sharing with a clinician'),
               onTap: () {
                 Navigator.pop(sheetContext);
-                _exportPdf(record, gait, profile, email);
+                _exportPdf(record, summary, profile, email);
               },
             ),
             ListTile(
@@ -135,7 +153,7 @@ class _DetailScreenState extends State<DetailScreen> {
               subtitle: const Text('For spreadsheets or EHR import'),
               onTap: () {
                 Navigator.pop(sheetContext);
-                _exportCsv(record, gait, profile, email);
+                _exportCsv(record, summary, profile, email);
               },
             ),
           ],
@@ -146,13 +164,13 @@ class _DetailScreenState extends State<DetailScreen> {
 
   Future<void> _exportPdf(
     InsoleRecord record,
-    ClinicalGaitReport gait,
+    RecordSummary summary,
     UserProfile profile,
     String? email,
   ) async {
     final bytes = await ClinicalReportService.buildPdf(
       record: record,
-      gait: gait,
+      gait: summary.clinical,
       profile: profile,
       patientEmail: email,
     );
@@ -161,13 +179,13 @@ class _DetailScreenState extends State<DetailScreen> {
 
   Future<void> _exportCsv(
     InsoleRecord record,
-    ClinicalGaitReport gait,
+    RecordSummary summary,
     UserProfile profile,
     String? email,
   ) async {
     final csv = ClinicalReportService.buildCsv(
       record: record,
-      gait: gait,
+      gait: summary.clinical,
       profile: profile,
       patientEmail: email,
     );
@@ -193,29 +211,20 @@ class _DetailScreenState extends State<DetailScreen> {
     }
 
     final auth = context.watch<AuthProvider>();
-
-    final footprintResult = GaitAnalysis.footprint(record.line, record.rightLine);
-    final leftProportion = GaitAnalysis.proportion(record.line);
+    final summary = record.summary;
+    final gait = summary.clinical;
+    final frames = _frames;
 
     final calorie = HealthCalc.calculateCalories(record.distanceKm, auth.profile.weightKg);
     final target = (calorie / 5000 * 100).round();
+    final sTarget = (summary.stepCount / 10000 * 100).round();
 
-    final stepCount = GaitAnalysis.processFrames(record.details);
-    final sTarget = (stepCount / 10000 * 100).round();
-    final cadence = GaitAnalysis.calculateCadence(stepCount, record.time);
-
-    final flightContact = GaitAnalysis.analyzeFlightAndContact(
-      GaitAnalysis.truncateToSevenCols(record.details),
-    );
-
-    final lFront = GaitAnalysis.calculateAverage(record.line, _frontKeys).round();
-    final rFront = GaitAnalysis.calculateAverage(record.rightLine, _frontKeys).round();
-    final lMid = GaitAnalysis.calculateAverage(record.line, _midKeys).round();
-    final rMid = GaitAnalysis.calculateAverage(record.rightLine, _midKeys).round();
-    final lRear = GaitAnalysis.calculateAverage(record.line, _rearKeys).round();
-    final rRear = GaitAnalysis.calculateAverage(record.rightLine, _rearKeys).round();
-
-    final gait = ClinicalGaitAnalysis.analyze(record);
+    FootLineData? leftLine;
+    FootLineData? rightLine;
+    if (frames != null) {
+      leftLine = FootLineData.fromFrames(frames, FootPointLayout.left);
+      rightLine = FootLineData.fromFrames(frames, FootPointLayout.right);
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -224,7 +233,7 @@ class _DetailScreenState extends State<DetailScreen> {
           IconButton(
             icon: const Icon(Icons.ios_share),
             tooltip: 'Export clinical report',
-            onPressed: () => _showExportSheet(record, gait, auth.profile, auth.email),
+            onPressed: () => _showExportSheet(record, summary, auth.profile, auth.email),
           ),
         ],
       ),
@@ -253,7 +262,8 @@ class _DetailScreenState extends State<DetailScreen> {
                       IconButton(
                         icon: Icon(_playing ? Icons.pause_circle_filled : Icons.play_circle_fill,
                             color: AppColors.primary, size: 36),
-                        onPressed: record.details.isEmpty ? null : (_playing ? _stop : _play),
+                        onPressed:
+                            (frames == null || frames.isEmpty) ? null : (_playing ? _stop : _play),
                       ),
                       Expanded(
                         child: Slider(
@@ -274,16 +284,16 @@ class _DetailScreenState extends State<DetailScreen> {
             ),
             const SizedBox(height: 20),
             _SectionTitle('Step count'),
-            _ProgressRow(label: "Today's steps", value: '$stepCount step', percent: sTarget),
+            _ProgressRow(label: "Today's steps", value: '${summary.stepCount} step', percent: sTarget),
             const SizedBox(height: 20),
             _SectionTitle('Calorie'),
             _ProgressRow(label: 'Calorie expenditure', value: '$calorie kcal', percent: target),
             const SizedBox(height: 20),
             _SectionTitle('Footprint'),
-            _LRRow(left: footprintResult.footprintLeft, right: footprintResult.footprintRight),
+            _LRRow(left: summary.footprintLeft, right: summary.footprintRight),
             const SizedBox(height: 20),
             _SectionTitle('Arch'),
-            _LRRow(left: footprintResult.archLeft, right: footprintResult.archRight),
+            _LRRow(left: summary.archLeft, right: summary.archRight),
             const SizedBox(height: 20),
             _SectionTitle('Cadence & pace'),
             Row(
@@ -295,21 +305,21 @@ class _DetailScreenState extends State<DetailScreen> {
             ),
             Row(
               children: [
-                Expanded(child: _StatBox(label: 'Ground contact', value: '${flightContact.totalGround} ms')),
-                Expanded(child: _StatBox(label: 'Cadence', value: '$cadence spm')),
-                Expanded(child: _StatBox(label: 'Flight time', value: '${flightContact.totalAir} ms')),
+                Expanded(child: _StatBox(label: 'Ground contact', value: '${summary.groundContactMs} ms')),
+                Expanded(child: _StatBox(label: 'Cadence', value: '${summary.cadenceSpm} spm')),
+                Expanded(child: _StatBox(label: 'Flight time', value: '${summary.flightMs} ms')),
               ],
             ),
             Row(
               children: [
-                Expanded(child: _StatBox(label: 'Forefoot', value: '${leftProportion.forefootPct}%')),
-                Expanded(child: _StatBox(label: 'Heel', value: '${leftProportion.hindfootPct}%')),
-                Expanded(child: _StatBox(label: 'Full', value: '${leftProportion.wholePct}%')),
+                Expanded(child: _StatBox(label: 'Forefoot', value: '${summary.forefootPct}%')),
+                Expanded(child: _StatBox(label: 'Heel', value: '${summary.hindfootPct}%')),
+                Expanded(child: _StatBox(label: 'Full', value: '${summary.wholePct}%')),
               ],
             ),
             const SizedBox(height: 20),
             _SectionTitle('Grounding method'),
-            _LRRow(left: footprintResult.landingLeft, right: footprintResult.landingRight),
+            _LRRow(left: summary.landingLeft, right: summary.landingRight),
             const SizedBox(height: 20),
             _SectionTitle('Clinical gait metrics'),
             Container(
@@ -415,16 +425,22 @@ class _DetailScreenState extends State<DetailScreen> {
             ],
             const SizedBox(height: 20),
             const Text('Left foot data changes', style: TextStyle(fontWeight: FontWeight.w700)),
-            FootLineChart(data: record.line, windowSize: null, height: 200),
+            if (leftLine == null)
+              const SizedBox(height: 200)
+            else
+              FootLineChart(data: leftLine, windowSize: null, height: 200),
             const SizedBox(height: 20),
             const Text('Right foot data changes', style: TextStyle(fontWeight: FontWeight.w700)),
-            FootLineChart(data: record.rightLine, windowSize: null, height: 200),
+            if (rightLine == null)
+              const SizedBox(height: 200)
+            else
+              FootLineChart(data: rightLine, windowSize: null, height: 200),
             const SizedBox(height: 20),
             _SectionTitle('Averages'),
             _AverageTable(
-              lFront: lFront, rFront: rFront,
-              lMid: lMid, rMid: rMid,
-              lRear: lRear, rRear: rRear,
+              lFront: summary.lFront, rFront: summary.rFront,
+              lMid: summary.lMid, rMid: summary.rMid,
+              lRear: summary.lRear, rRear: summary.rRear,
             ),
           ],
         ),
