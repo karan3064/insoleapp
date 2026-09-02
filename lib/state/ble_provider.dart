@@ -13,6 +13,7 @@ import '../models/insole_record.dart';
 import '../models/pressure_frame.dart';
 import '../models/record_summary.dart';
 import '../models/track_point.dart';
+import '../services/capture_service_channel.dart';
 import '../services/insole_frame_parser.dart';
 import '../services/session_file_store.dart';
 
@@ -271,6 +272,14 @@ class BleProvider extends ChangeNotifier {
 
     unawaited(_startLocationTracking());
 
+    // Best-effort: lets Android keep this process (and the BLE/GPS
+    // listeners running inside it) alive if the app gets backgrounded
+    // mid-session, e.g. the phone locks while the insoles are still being
+    // worn. A denied notification permission or unsupported platform just
+    // means capture only survives while the app stays foregrounded.
+    unawaited(Permission.notification.request());
+    unawaited(CaptureServiceChannel.start());
+
     notifyListeners();
   }
 
@@ -287,6 +296,7 @@ class BleProvider extends ChangeNotifier {
     await _frameSink?.flush();
     await _frameSink?.close();
     _frameSink = null;
+    unawaited(CaptureServiceChannel.stop());
   }
 
   void _resetAccumulators() {
@@ -416,6 +426,7 @@ class BleProvider extends ChangeNotifier {
     _testTimer?.cancel();
     _positionSub?.cancel();
     _frameSink?.close();
+    unawaited(CaptureServiceChannel.stop());
     super.dispose();
   }
 }
