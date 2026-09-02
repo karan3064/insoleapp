@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../models/insole_record.dart';
+import '../services/cloud_frame_upload_service.dart';
 import '../services/firestore_sync_service.dart';
 import '../services/local_storage_service.dart';
 import '../services/session_file_store.dart';
@@ -10,6 +11,7 @@ class InsoleProvider extends ChangeNotifier {
   final _localStorage = LocalStorageService();
   final _firestore = FirestoreSyncService();
   final _fileStore = SessionFileStore();
+  final _frameUpload = CloudFrameUploadService();
 
   List<InsoleRecord> list = [];
   bool loaded = false;
@@ -50,6 +52,26 @@ class InsoleProvider extends ChangeNotifier {
       await _firestore.setRecord(uid, record);
     } catch (e) {
       debugPrint('insole syncRecord failed: $e');
+      return;
+    }
+
+    // Best-effort raw-frame upload for a future cloud analysis pipeline --
+    // separate from the metadata write above so a large/slow upload (or
+    // one that fails, e.g. missing Storage rules) never blocks or breaks
+    // the record actually showing up as synced.
+    final path = record.framesFilePath;
+    if (path == null) return;
+    try {
+      final storagePath = await _frameUpload.uploadFrames(
+        uid: uid,
+        sessionRecordId: record.id,
+        localPath: path,
+      );
+      if (storagePath != null) {
+        await _firestore.setFramesStoragePath(uid, record.id, storagePath);
+      }
+    } catch (e) {
+      debugPrint('insole frame upload failed: $e');
     }
   }
 

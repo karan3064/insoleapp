@@ -25,6 +25,13 @@ class InsoleRecord {
   /// down from another device, or a summary-only cloud record).
   final String? framesFilePath;
 
+  /// Cloud Storage path where this session's frame file was uploaded (see
+  /// `CloudFrameUploadService`), for a future server-side analysis
+  /// pipeline. Null until that best-effort upload completes -- it's
+  /// written as a separate merge update after the record itself syncs, so
+  /// it's often not set yet even for a record that's otherwise synced.
+  final String? framesStoragePath;
+
   final double distanceKm;
   final int pace; // minutes per km
   final int totalTime; // minutes
@@ -37,6 +44,7 @@ class InsoleRecord {
     required this.time,
     required this.summary,
     required this.framesFilePath,
+    this.framesStoragePath,
     required this.distanceKm,
     required this.pace,
     required this.totalTime,
@@ -50,6 +58,7 @@ class InsoleRecord {
         'time': time,
         'summary': summary.toJson(),
         'framesFilePath': framesFilePath,
+        'framesStoragePath': framesStoragePath,
         'distance': distanceKm,
         'pace': pace,
         'totalTime': totalTime,
@@ -66,6 +75,7 @@ class InsoleRecord {
           ? RecordSummary.empty
           : RecordSummary.fromJson(Map<String, dynamic>.from(json['summary'] as Map)),
       framesFilePath: json['framesFilePath'] as String?,
+      framesStoragePath: json['framesStoragePath'] as String?,
       distanceKm: (json['distance'] as num?)?.toDouble() ?? 0,
       pace: (json['pace'] as num?)?.toInt() ?? 0,
       totalTime: (json['totalTime'] as num?)?.toInt() ?? 0,

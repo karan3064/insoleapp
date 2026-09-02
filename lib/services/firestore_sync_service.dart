@@ -32,4 +32,16 @@ class FirestoreSyncService {
     final snap = await _db.collection('users').doc(uid).collection('insoleRecords').get();
     return snap.docs.map((d) => InsoleRecord.fromJson(d.data())).toList();
   }
+
+  /// Records where a session's raw frame file landed in Cloud Storage,
+  /// once `CloudFrameUploadService` finishes uploading it. Merged onto the
+  /// existing (already-synced) record doc rather than a full overwrite.
+  Future<void> setFramesStoragePath(String uid, int recordId, String storagePath) async {
+    await _db
+        .collection('users')
+        .doc(uid)
+        .collection('insoleRecords')
+        .doc(recordId.toString())
+        .set({'framesStoragePath': storagePath}, SetOptions(merge: true));
+  }
 }
