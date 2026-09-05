@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
 
 import '../services/format_utils.dart';
@@ -12,6 +11,7 @@ import '../theme/app_colors.dart';
 import '../theme/app_palette.dart';
 import '../widgets/foot_line_chart.dart';
 import '../widgets/foot_pressure_view.dart';
+import '../widgets/gps_path_map.dart';
 import 'detail_screen.dart';
 
 /// Mirrors `chart/gather/gather.vue`: live point/heat view toggle, GPS path
@@ -113,29 +113,7 @@ class _GatherScreenState extends State<GatherScreen> {
               child: Text(_saving ? 'Saving...' : 'Save session'),
             ),
             const SizedBox(height: 20),
-            if (ble.path.isNotEmpty)
-              SizedBox(
-                height: 220,
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(20),
-                  child: GoogleMap(
-                    initialCameraPosition: CameraPosition(
-                      target: LatLng(ble.path.first.latitude, ble.path.first.longitude),
-                      zoom: 16,
-                    ),
-                    polylines: {
-                      Polyline(
-                        polylineId: const PolylineId('path'),
-                        color: AppColors.primary,
-                        width: 4,
-                        points: ble.path.map((pt) => LatLng(pt.latitude, pt.longitude)).toList(),
-                      ),
-                    },
-                    myLocationButtonEnabled: false,
-                    zoomControlsEnabled: false,
-                  ),
-                ),
-              ),
+            if (ble.path.isNotEmpty) GpsPathMap(path: ble.path),
             const SizedBox(height: 20),
             const Text('Left foot waveform', style: TextStyle(fontWeight: FontWeight.w700)),
             FootLineChart(data: ble.leftLine),

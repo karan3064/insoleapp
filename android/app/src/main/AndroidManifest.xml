@@ -25,15 +25,6 @@
         android:label="NurvoSync"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
-        <!--
-          Google Maps requires an API key (used by the GPS path map on the
-          test + detail screens). Get one at
-          https://console.cloud.google.com/google/maps-apis and paste it
-          below, or set it via a build config field instead of committing it
-          here.
-        -->
-        <meta-data android:name="com.google.android.geo.API_KEY"
-            android:value="YOUR_GOOGLE_MAPS_API_KEY"/>
         <activity
             android:name=".MainActivity"
             android:exported="true"

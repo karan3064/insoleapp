@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -24,6 +23,7 @@ import '../theme/app_colors.dart';
 import '../theme/app_palette.dart';
 import '../widgets/foot_line_chart.dart';
 import '../widgets/foot_pressure_view.dart';
+import '../widgets/gps_path_map.dart';
 
 /// Mirrors `chart/detail/detail.vue`: replays a saved test session and
 /// shows the derived gait analytics (footprint, arch, landing method,
@@ -400,28 +400,7 @@ class _DetailScreenState extends State<DetailScreen> {
             ),
             if (record.path.isNotEmpty) ...[
               const SizedBox(height: 20),
-              SizedBox(
-                height: 220,
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(20),
-                  child: GoogleMap(
-                    initialCameraPosition: CameraPosition(
-                      target: LatLng(record.path.first.latitude, record.path.first.longitude),
-                      zoom: 16,
-                    ),
-                    polylines: {
-                      Polyline(
-                        polylineId: const PolylineId('path'),
-                        color: AppColors.primary,
-                        width: 4,
-                        points: record.path.map((pt) => LatLng(pt.latitude, pt.longitude)).toList(),
-                      ),
-                    },
-                    myLocationButtonEnabled: false,
-                    zoomControlsEnabled: false,
-                  ),
-                ),
-              ),
+              GpsPathMap(path: record.path),
             ],
             const SizedBox(height: 20),
             const Text('Left foot data changes', style: TextStyle(fontWeight: FontWeight.w700)),
