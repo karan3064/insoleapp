@@ -5,6 +5,7 @@ import '../state/auth_provider.dart';
 import '../state/insole_provider.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_palette.dart';
+import 'join_family_contact_screen.dart';
 
 /// Mirrors `pages/login/login.vue`.
 class LoginScreen extends StatefulWidget {
@@ -110,6 +111,13 @@ class _LoginScreenState extends State<LoginScreen> {
                   onPressed: () => Navigator.of(context).pushNamed('/signup'),
                   child: const Text("Don't have an account? Sign up",
                       style: TextStyle(color: AppColors.primary)),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const JoinFamilyContactScreen()),
+                  ),
+                  child: Text('Join as a family contact instead',
+                      style: TextStyle(color: p.textSecondary)),
                 ),
               ],
             ),

@@ -3,9 +3,11 @@ import 'package:provider/provider.dart';
 
 import '../services/health_calc.dart';
 import '../state/auth_provider.dart';
+import '../state/ble_provider.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_palette.dart';
 import '../widgets/page_header.dart';
+import 'safety_screen.dart';
 
 /// Mirrors `pages/my/my.vue`: profile fields used by the health
 /// calculations (height/weight/sex/birth date), plus logout.
@@ -181,10 +183,26 @@ class ProfileScreen extends StatelessWidget {
                 ],
               ),
             ],
+            const SizedBox(height: 16),
+            if (auth.uid != null)
+              _SettingsGroup(children: [
+                _SettingsRow(
+                  label: 'Safety & geofence',
+                  value: 'Manage',
+                  last: true,
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const SafetyScreen()),
+                  ),
+                ),
+              ]),
             const SizedBox(height: 32),
             if (auth.uid != null)
               OutlinedButton(
                 onPressed: () async {
+                  // Clears the previous account's safe zone/uid out of
+                  // BleProvider so it can't leak onto whoever logs in next
+                  // on this device.
+                  context.read<BleProvider>().configureSafety(uid: null, zone: null);
                   await auth.logout();
                   if (context.mounted) {
                     Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);

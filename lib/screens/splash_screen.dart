@@ -2,7 +2,9 @@ import 'package:firebase_auth/firebase_auth.dart' hide AuthProvider;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../services/geofence_service.dart';
 import '../state/auth_provider.dart';
+import '../state/ble_provider.dart';
 import '../state/insole_provider.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_palette.dart';
@@ -27,9 +29,11 @@ class _SplashScreenState extends State<SplashScreen> {
   Future<void> _boot() async {
     final auth = context.read<AuthProvider>();
     final insole = context.read<InsoleProvider>();
+    final ble = context.read<BleProvider>();
 
     auth.onLoggedIn = (uid) {
       insole.hydrateFromCloud(uid);
+      _loadSafety(ble, uid);
     };
 
     await Future.wait([
@@ -47,10 +51,25 @@ class _SplashScreenState extends State<SplashScreen> {
     if (isLoggedIn) {
       await auth.hydrateProfile();
       await insole.hydrateFromCloud(auth.uid);
+      await _loadSafety(ble, auth.uid);
     }
 
     if (!mounted) return;
     Navigator.of(context).pushReplacementNamed(isLoggedIn ? '/root' : '/login');
+  }
+
+  /// Loads the signed-in patient's configured safe zone into `BleProvider`
+  /// so geofence breaches can be detected during capture -- see
+  /// `GeofenceTracker`. A missing/failed load just means no zone is
+  /// configured yet, not an error worth surfacing here.
+  Future<void> _loadSafety(BleProvider ble, String? uid) async {
+    if (uid == null) return;
+    try {
+      final zone = await GeofenceService().getSafeZone(uid);
+      ble.configureSafety(uid: uid, zone: zone);
+    } catch (e) {
+      debugPrint('loadSafety failed: $e');
+    }
   }
 
   @override

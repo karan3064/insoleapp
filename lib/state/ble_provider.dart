@@ -12,8 +12,11 @@ import '../models/insole_device.dart';
 import '../models/insole_record.dart';
 import '../models/pressure_frame.dart';
 import '../models/record_summary.dart';
+import '../models/safe_zone.dart';
 import '../models/track_point.dart';
 import '../services/capture_service_channel.dart';
+import '../services/geofence_service.dart';
+import '../services/geofence_tracker.dart';
 import '../services/insole_frame_parser.dart';
 import '../services/session_file_store.dart';
 
@@ -67,6 +70,23 @@ class BleProvider extends ChangeNotifier {
   final List<TrackPoint> path = [];
   double totalDistanceKm = 0;
   DateTime? _testStartTime;
+
+  /// The signed-in patient's uid + configured safe zone, set from outside
+  /// (see `SplashScreen`/`SafetyScreen`) whenever login completes or the
+  /// zone is edited -- `BleProvider` doesn't reach into auth/Firestore
+  /// itself, matching how `syncRecord`/`saveSession` take a uid as a
+  /// parameter rather than looking it up. Geofence checking only runs
+  /// while a session is actively capturing, same as the GPS path itself.
+  String? _patientUid;
+  SafeZone? _safeZone;
+  final _geofenceService = GeofenceService();
+  final _geofenceTracker = GeofenceTracker();
+
+  void configureSafety({required String? uid, required SafeZone? zone}) {
+    _patientUid = uid;
+    _safeZone = zone;
+    _geofenceTracker.reset();
+  }
 
   final _parser = InsoleFrameParser();
   StreamSubscription<List<ScanResult>>? _scanSub;
@@ -343,8 +363,35 @@ class BleProvider extends ChangeNotifier {
       }
 
       path.add(point);
+      _checkGeofence(point);
       notifyListeners();
     });
+  }
+
+  /// Fires once per exit from the configured safe zone (see
+  /// `GeofenceTracker`) -- records the breach to Firestore so a Cloud
+  /// Function can notify family contacts by push + email. Best-effort:
+  /// a failed write here shouldn't interrupt capture, same posture as
+  /// `syncRecord`.
+  void _checkGeofence(TrackPoint point) {
+    final zone = _safeZone;
+    final uid = _patientUid;
+    if (zone == null || uid == null) return;
+
+    if (_geofenceTracker.checkBreach(zone, point.latitude, point.longitude)) {
+      final distanceMeters = Geolocator.distanceBetween(
+        zone.latitude,
+        zone.longitude,
+        point.latitude,
+        point.longitude,
+      );
+      unawaited(_geofenceService.recordBreach(
+        uid,
+        latitude: point.latitude,
+        longitude: point.longitude,
+        distanceMeters: distanceMeters,
+      ).catchError((Object e) => debugPrint('geofence recordBreach failed: $e')));
+    }
   }
 
   /// Snapshots the currently-accumulated data into a saved record, then
