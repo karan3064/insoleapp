@@ -10,5 +10,27 @@
         "firebase-debug.*.log"
       ]
     }
-  ]
+  ],
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "solesync-f7740",
+          "appId": "1:158134545545:android:9bac9d417394c162ddea58",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "solesync-f7740",
+          "configurations": {
+            "android": "1:158134545545:android:9bac9d417394c162ddea58",
+            "ios": "1:158134545545:ios:d52c03e8c0460b15ddea58",
+            "web": "1:158134545545:web:851c003a5740265dddea58",
+            "windows": "1:158134545545:web:1a9c982c6d26353fddea58"
+          }
+        }
+      }
+    }
+  }
 }
