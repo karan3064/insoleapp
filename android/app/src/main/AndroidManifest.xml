@@ -15,7 +15,7 @@
 
     <!-- Foreground service: keeps BLE + GPS capture running while the app
          is backgrounded (screen locked, user switched apps) during a
-         long/all-day session -- see CaptureForegroundService. -->
+         long/all-day session. See CaptureForegroundService. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION"/>
