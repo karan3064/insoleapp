@@ -76,19 +76,23 @@ class _GatherScreenState extends State<GatherScreen> {
                     onChanged: (v) => setState(() => _heatMode = v),
                   ),
                   const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      if (_heatMode) ...[const HeatLegend(), const SizedBox(width: 16)],
-                      FootPressureView(grid: ble.grid, isRight: false, heatMode: _heatMode),
-                      // A clear gap (not a drawn boundary around either foot) is
-                      // what actually tells the two feet apart now that neither
-                      // has an outline -- without it they read as one scattered
-                      // cloud of points.
-                      const SizedBox(width: 28),
-                      FootPressureView(grid: ble.grid, isRight: true, heatMode: _heatMode),
-                    ],
+                  // Horizontally scrollable as a hard guard against overflow --
+                  // the legend + two foot widgets' combined width doesn't fit
+                  // every phone's screen width, and a RenderFlex overflow
+                  // (the yellow/black hazard stripe) is worse than a view
+                  // that's occasionally scrollable on narrow devices.
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        if (_heatMode) ...[const HeatLegend(), const SizedBox(width: 12)],
+                        FootPressureView(grid: ble.grid, isRight: false, heatMode: _heatMode),
+                        const SizedBox(width: 12),
+                        FootPressureView(grid: ble.grid, isRight: true, heatMode: _heatMode),
+                      ],
+                    ),
                   ),
                   const SizedBox(height: 16),
                   Row(

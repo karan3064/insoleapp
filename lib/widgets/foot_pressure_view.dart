@@ -10,14 +10,14 @@ import '../theme/app_palette.dart';
 /// (mirrors `components/insole/Heat/Heat.vue` + `RHeat.vue`) or as discrete
 /// point indicators (mirrors `LeftColor.vue` / `RightColor.vue`).
 ///
-/// Deliberately has no drawn foot silhouette/boundary -- matching a real
-/// plantar-pressure scanner display, the "foot shape" comes entirely from
-/// where the actual sensors are and how much pressure they're reading,
-/// not an artificial outline. At rest, each of the 16 sensor positions
-/// shows as a small neutral dot in its real physical layout; the moment
-/// real pressure appears, colored blobs bloom at the loaded sensors and
-/// merge into a foot-shaped region purely because that's where the
-/// sensors physically are.
+/// There's no foot-outline artwork bundled with this port (the original
+/// app's `/static/img/left.png` / `right.png` weren't shared), so the
+/// silhouette is drawn procedurally -- swap `_FootOutlinePainter` for an
+/// `Image.asset` + mask if you have the real artwork. A sensor-data-only
+/// render (no drawn boundary at all) was tried and reverted: with only
+/// 16 sparse sensors per foot, the two feet read as one scattered mess of
+/// dots without an outline to tell them apart -- real commercial scanners
+/// that get away with no boundary have hundreds of sensors.
 class FootPressureView extends StatelessWidget {
   final List<List<int>> grid;
   final bool isRight;
@@ -53,6 +53,8 @@ class FootPressureView extends StatelessWidget {
           colOffset: colOffset,
           values: values,
           heatMode: heatMode,
+          outlineFillColor: p.surface2,
+          outlineBorderColor: p.border,
           zeroDotColor: p.textTertiary,
         ),
       ),
@@ -102,6 +104,8 @@ class _FootPainter extends CustomPainter {
   final int colOffset;
   final List<int> values;
   final bool heatMode;
+  final Color outlineFillColor;
+  final Color outlineBorderColor;
   final Color zeroDotColor;
 
   _FootPainter({
@@ -109,18 +113,37 @@ class _FootPainter extends CustomPainter {
     required this.colOffset,
     required this.values,
     required this.heatMode,
+    required this.outlineFillColor,
+    required this.outlineBorderColor,
     required this.zeroDotColor,
   });
+
+  Path _outline(Size size) {
+    final w = size.width;
+    final h = size.height;
+    final path = Path();
+    // A simple stylized foot silhouette in a 0..1 x 0..1 box, toes at top.
+    path.moveTo(w * 0.50, h * 0.02);
+    path.cubicTo(w * 0.68, h * 0.02, w * 0.80, h * 0.10, w * 0.78, h * 0.20);
+    path.cubicTo(w * 0.76, h * 0.28, w * 0.66, h * 0.30, w * 0.66, h * 0.38);
+    path.cubicTo(w * 0.66, h * 0.46, w * 0.92, h * 0.55, w * 0.94, h * 0.72);
+    path.cubicTo(w * 0.97, h * 0.88, w * 0.80, h * 0.99, w * 0.50, h * 0.99);
+    path.cubicTo(w * 0.20, h * 0.99, w * 0.03, h * 0.88, w * 0.06, h * 0.72);
+    path.cubicTo(w * 0.08, h * 0.55, w * 0.34, h * 0.46, w * 0.34, h * 0.38);
+    path.cubicTo(w * 0.34, h * 0.30, w * 0.24, h * 0.28, w * 0.22, h * 0.20);
+    path.cubicTo(w * 0.20, h * 0.10, w * 0.32, h * 0.02, w * 0.50, h * 0.02);
+    path.close();
+    return path;
+  }
 
   Offset _pointPos(Size size, int row, int col) {
     final x = (col - colOffset) / FootPointLayout.maxCol;
     // Row 0 is the forefoot (toes), row 19 is the heel, and the widget's
     // y axis already runs top-to-bottom in that same order (py below maps
     // y=0 to the top, y=1 to the bottom) -- so this is a direct mapping,
-    // NOT inverted. (A previous `1 - ...` here was backwards: it put the
-    // heel at the top and toes at the bottom.)
+    // NOT inverted.
     final y = (row - FootPointLayout.minRow) / FootPointLayout.maxRow;
-    // Keep points comfortably inside the widget's bounds.
+    // Keep points comfortably inside the silhouette.
     final margin = size.width * 0.12;
     final px = margin + x * (size.width - margin * 2);
     final py = size.height * 0.06 + y * (size.height * 0.88);
@@ -138,55 +161,73 @@ class _FootPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    final outline = _outline(size);
+
+    final outlineFill = Paint()
+      ..color = outlineFillColor
+      ..style = PaintingStyle.fill;
+    final outlineStroke = Paint()
+      ..color = outlineBorderColor
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2;
+
+    canvas.drawPath(outline, outlineFill);
+    canvas.drawPath(outline, outlineStroke);
+
+    canvas.save();
+    canvas.clipPath(outline);
+
     const maxValue = 30.0; // scaled sensor units (post threshold+scale)
 
-    // No silhouette, no clip, no base fill: the "foot shape" is whatever
-    // the real sensor data draws, nothing more. At rest, a small neutral
-    // dot marks each of the 16 real sensor positions (in their true
-    // physical layout) so the sensors still read as present/live; the
-    // moment a point has real pressure, a soft colored blob replaces its
-    // dot, and overlapping blobs from neighboring loaded sensors merge
-    // into a continuous foot-shaped region purely because that's where
-    // the sensors physically sit underfoot.
-    // Painted lowest-value first, so a higher-pressure point's blob is
-    // never visually dulled by a lower one's semi-transparent edge
-    // landing on top of it afterward.
-    final order = List<int>.generate(points.length, (i) => i)
-      ..sort((a, b) => values[a].compareTo(values[b]));
+    if (heatMode) {
+      // A continuous-looking clinical pressure map needs the whole foot
+      // colored, not just hot spots over a blank background -- fill the
+      // whole outline with the coldest ramp color first, then layer
+      // hot-spot blobs on top, hottest last.
+      canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), Paint()..color = _rampColor(0));
 
-    for (final i in order) {
-      final v = values[i];
-      final pos = _pointPos(size, points[i][0], points[i][1]);
+      final order = List<int>.generate(points.length, (i) => i)
+        ..sort((a, b) => values[a].compareTo(values[b]));
 
-      if (v <= 0) {
-        canvas.drawCircle(pos, size.width * 0.02, Paint()..color = zeroDotColor.withValues(alpha: 0.3));
-        continue;
-      }
+      for (final i in order) {
+        final v = values[i];
+        if (v <= 0) continue;
+        final pos = _pointPos(size, points[i][0], points[i][1]);
+        final t = (v / maxValue).clamp(0.0, 1.0);
 
-      final t = (v / maxValue).clamp(0.0, 1.0);
-
-      if (heatMode) {
         // A real Gaussian blur (not a radial-gradient alpha fade) is what
         // makes neighboring hot spots melt into one continuous blob
         // instead of reading as a cluster of distinct overlapping
         // circles -- a gradient's edge, however soft, is still a crisp
         // boundary once two of them overlap at the same alpha; a blur
         // genuinely diffuses the pixels themselves.
-        final radius = size.width * (0.17 + 0.10 * t);
+        final radius = size.width * (0.22 + 0.12 * t);
         final paint = Paint()
           ..color = _rampColor(t)
-          ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, radius * 0.7);
+          ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, radius * 0.6);
         canvas.drawCircle(pos, radius, paint);
-      } else {
-        final radius = size.width * (0.05 + 0.05 * t);
-        canvas.drawCircle(pos, radius, Paint()..color = _rampColor(t));
+      }
+    } else {
+      for (var i = 0; i < points.length; i++) {
+        final v = values[i];
+        final pos = _pointPos(size, points[i][0], points[i][1]);
+        final t = (v / maxValue).clamp(0.0, 1.0);
+
+        final dotPaint = Paint()
+          ..color = v > 0 ? _rampColor(t) : zeroDotColor.withValues(alpha: 0.35);
+        final radius = v > 0 ? size.width * (0.05 + 0.05 * t) : size.width * 0.025;
+        canvas.drawCircle(pos, radius, dotPaint);
       }
     }
+
+    canvas.restore();
   }
 
   @override
   bool shouldRepaint(covariant _FootPainter oldDelegate) {
     return heatMode != oldDelegate.heatMode ||
+        outlineFillColor != oldDelegate.outlineFillColor ||
+        outlineBorderColor != oldDelegate.outlineBorderColor ||
         zeroDotColor != oldDelegate.zeroDotColor ||
         !_listEquals(values, oldDelegate.values);
   }

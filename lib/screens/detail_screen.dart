@@ -275,15 +275,18 @@ class _DetailScreenState extends State<DetailScreen> {
                 children: [
                   _ModeToggle(heatMode: _heatMode, onChanged: (v) => setState(() => _heatMode = v)),
                   const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      if (_heatMode) ...[const HeatLegend(), const SizedBox(width: 16)],
-                      FootPressureView(grid: _grid, isRight: false, heatMode: _heatMode),
-                      const SizedBox(width: 28),
-                      FootPressureView(grid: _grid, isRight: true, heatMode: _heatMode),
-                    ],
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        if (_heatMode) ...[const HeatLegend(), const SizedBox(width: 12)],
+                        FootPressureView(grid: _grid, isRight: false, heatMode: _heatMode),
+                        const SizedBox(width: 12),
+                        FootPressureView(grid: _grid, isRight: true, heatMode: _heatMode),
+                      ],
+                    ),
                   ),
                   const SizedBox(height: 12),
                   Row(
