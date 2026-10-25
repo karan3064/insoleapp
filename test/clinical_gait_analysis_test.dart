@@ -106,6 +106,43 @@ void main() {
       expect(report.strideTimeAsymmetryPercent, closeTo(40, 0.001));
     });
 
+    test('debounces a single noisy below-threshold sample instead of counting an extra step', () {
+      // A brief (single-sample, 50ms) dip below threshold mid-stance --
+      // e.g. sensor noise, not a real toe-off -- should be merged back into
+      // one continuous stance rather than read as two separate steps.
+      // Found by running this exact detection logic against real labeled
+      // force-plate recordings (PhysioNet's "Gait in Parkinson's Disease"
+      // database): without this debounce, some real trials' step counts
+      // came out 2-3x their true value from noise alone.
+      final noisyLeft = _footLine([100, 100, 0, 100, 100, 100]);
+      final times = [0, 50, 100, 150, 200, 250];
+      final noisyDetails = [for (final t in times) PressureFrame(time: t, item: emptyGrid())];
+
+      final report = ClinicalGaitAnalysis.analyze(
+        line: noisyLeft,
+        rightLine: FootLineData(),
+        details: noisyDetails,
+      );
+      expect(report.left.stepCount, 1);
+    });
+
+    test('still detects two real steps when the gap between them is a plausible swing phase', () {
+      // Gap here (150ms) is below real swing-phase duration territory but
+      // still well above the noise-debounce window, so it must NOT be
+      // merged away -- this guards against setting the debounce window
+      // too aggressively.
+      final realSteps = _footLine([100, 100, 0, 0, 0, 100, 100]);
+      final times = [0, 50, 100, 150, 200, 250, 300];
+      final details2 = [for (final t in times) PressureFrame(time: t, item: emptyGrid())];
+
+      final report = ClinicalGaitAnalysis.analyze(
+        line: realSteps,
+        rightLine: FootLineData(),
+        details: details2,
+      );
+      expect(report.left.stepCount, 2);
+    });
+
     test('handles no frame data without throwing', () {
       final report = ClinicalGaitAnalysis.analyze(
         line: FootLineData(),

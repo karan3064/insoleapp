@@ -385,6 +385,11 @@ class _DetailScreenState extends State<DetailScreen> {
                     left: _fmt(gait.left.swingTimeMeanMs, suffix: ' ms'),
                     right: _fmt(gait.right.swingTimeMeanMs, suffix: ' ms'),
                   ),
+                  _ClinicalMetricRow(
+                    label: 'Swing time CV',
+                    left: _fmt(gait.left.swingTimeCvPercent, suffix: '%'),
+                    right: _fmt(gait.right.swingTimeCvPercent, suffix: '%'),
+                  ),
                   const Divider(height: 24),
                   Row(
                     children: [

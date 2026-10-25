@@ -45,6 +45,19 @@ class FootGaitMetrics {
 
   double? get stanceTimeMeanMs => ClinicalGaitAnalysis._mean(stanceTimesMs);
   double? get swingTimeMeanMs => ClinicalGaitAnalysis._mean(swingTimesMs);
+  double? get swingTimeSdMs => ClinicalGaitAnalysis._stdDev(swingTimesMs);
+
+  /// Swing-time coefficient of variation, as a percentage -- the specific
+  /// metric reported in Hausdorff/Frenkel-Toledo/Yogev's PD gait-variability
+  /// papers (elevated swing-time CV is a validated PD biomarker, found to
+  /// respond differently from stride-time CV to gait speed and dual-task
+  /// load).
+  double? get swingTimeCvPercent {
+    final mean = swingTimeMeanMs;
+    final sd = swingTimeSdMs;
+    if (mean == null || mean == 0 || sd == null) return null;
+    return sd / mean * 100;
+  }
 
   /// Only the step count and stride/stance/swing time lists are kept --
   /// small (bounded by step count, not by session length) and enough to
@@ -151,6 +164,22 @@ class ClinicalGaitAnalysis {
   /// the threshold already used by `GaitAnalysis.analyzeFlightAndContact`.
   static const contactThreshold = 10;
 
+  /// Minimum gap (ms) a below-threshold dip must last before it's treated
+  /// as a real toe-off/swing phase rather than sensor noise.
+  ///
+  /// Without this, a single noisy frame dipping below [contactThreshold]
+  /// mid-stance reads as a complete step cycle (toe-off immediately
+  /// followed by a heel-strike), which can multiply the detected step
+  /// count several-fold and inflates stride-time variability into
+  /// nonsense. Found by running this exact detection logic against the
+  /// PhysioNet "Gait in Parkinson's Disease" database (real labeled
+  /// force-plate recordings): without debouncing, some trials' step counts
+  /// came out 2-3x their paired foot's count, with implied stride-time CV%
+  /// over 100% -- biomechanically impossible for a person still walking.
+  /// 100ms is comfortably below real human swing-phase duration
+  /// (typically 300-450ms), so no genuine swing gets merged away.
+  static const _minGapMs = 100;
+
   static ClinicalGaitReport analyze({
     required FootLineData line,
     required FootLineData rightLine,
@@ -218,9 +247,11 @@ class ClinicalGaitAnalysis {
 
   /// Rising-edge/falling-edge detection on a pressure-over-time series:
   /// a stance interval runs from the first sample above [contactThreshold]
-  /// to the first sample back at or below it.
+  /// to the first sample back at or below it, with any gap shorter than
+  /// [_minGapMs] merged back into the surrounding stance (see [_minGapMs]
+  /// for why).
   static List<StanceInterval> _stanceIntervals(List<MapEntry<int, int>> series) {
-    final intervals = <StanceInterval>[];
+    final raw = <StanceInterval>[];
     int? startMs;
 
     for (final sample in series) {
@@ -228,7 +259,7 @@ class ClinicalGaitAnalysis {
       if (inContact && startMs == null) {
         startMs = sample.key;
       } else if (!inContact && startMs != null) {
-        intervals.add(StanceInterval(startMs, sample.key));
+        raw.add(StanceInterval(startMs, sample.key));
         startMs = null;
       }
     }
@@ -236,10 +267,25 @@ class ClinicalGaitAnalysis {
     // Trailing stance that never lifted off within the recording: close it
     // at the last sample rather than discarding the step entirely.
     if (startMs != null && series.isNotEmpty) {
-      intervals.add(StanceInterval(startMs, series.last.key));
+      raw.add(StanceInterval(startMs, series.last.key));
     }
 
-    return intervals;
+    return _debounce(raw);
+  }
+
+  static List<StanceInterval> _debounce(List<StanceInterval> intervals) {
+    if (intervals.isEmpty) return intervals;
+
+    final merged = <StanceInterval>[intervals.first];
+    for (final next in intervals.skip(1)) {
+      final last = merged.last;
+      if (next.heelStrikeMs - last.toeOffMs < _minGapMs) {
+        merged[merged.length - 1] = StanceInterval(last.heelStrikeMs, next.toeOffMs);
+      } else {
+        merged.add(next);
+      }
+    }
+    return merged;
   }
 
   static FootGaitMetrics _footMetrics(List<StanceInterval> stances) {
