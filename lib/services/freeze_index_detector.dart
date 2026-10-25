@@ -80,6 +80,12 @@ class FreezeIndexDetector {
   /// persist/alert on it without polling [events] every frame.
   void Function(FogEvent event)? onEvent;
 
+  /// Called immediately on every open/close transition (true = just
+  /// started freezing, false = just stopped), unlike [onEvent] which only
+  /// fires on close -- lets a caller start/stop a real-time response (e.g.
+  /// rhythmic cueing) the moment a freeze begins, not after it's over.
+  void Function(bool isFreezing)? onFreezingChanged;
+
   FreezeIndexDetector({this.noiseFloor = 100});
 
   /// Feed one new pressure sample: [timeMs] is elapsed session time, and
@@ -124,6 +130,7 @@ class FreezeIndexDetector {
         _openEvent = FogEvent(startMs: nowMs, endMs: nowMs, peakFreezeIndex: freezeIndex);
         _openPeakFreezeIndex = freezeIndex;
         isFreezing = true;
+        onFreezingChanged?.call(true);
       }
     } else {
       if (freezeIndex > _openPeakFreezeIndex) _openPeakFreezeIndex = freezeIndex;
@@ -138,6 +145,7 @@ class FreezeIndexDetector {
         _openEvent = null;
         isFreezing = false;
         onEvent?.call(closed);
+        onFreezingChanged?.call(false);
       }
     }
   }
@@ -237,11 +245,18 @@ class FreezeIndexDetector {
   }
 
   void reset() {
+    final wasFreezing = isFreezing;
     _samples.clear();
     _lastEvalMs = -1 << 30;
     _openEvent = null;
     _openPeakFreezeIndex = 0;
     isFreezing = false;
     events.clear();
+    // If a reset happens mid-episode (e.g. a session ending while the
+    // patient is still frozen), callers relying on onFreezingChanged to
+    // stop a real-time response (cueing) still need that notification --
+    // otherwise it never arrives and the response (e.g. a haptic timer)
+    // keeps running indefinitely.
+    if (wasFreezing) onFreezingChanged?.call(false);
   }
 }

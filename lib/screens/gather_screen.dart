@@ -120,12 +120,15 @@ class _GatherScreenState extends State<GatherScreen> {
                   children: [
                     Icon(Icons.warning_amber_rounded, color: AppColors.warning),
                     const SizedBox(width: 10),
-                    const Expanded(
+                    Expanded(
                       child: Text(
-                        'Possible freezing-of-gait signal detected',
-                        style: TextStyle(fontWeight: FontWeight.w700),
+                        ble.isCueingActive
+                            ? 'Possible freeze detected -- rhythmic pulse cueing active to help you keep walking'
+                            : 'Possible freezing-of-gait signal detected',
+                        style: const TextStyle(fontWeight: FontWeight.w700),
                       ),
                     ),
+                    if (ble.isCueingActive) Icon(Icons.vibration, color: AppColors.warning),
                   ],
                 ),
               ),

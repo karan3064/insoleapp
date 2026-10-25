@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -91,14 +92,41 @@ class BleProvider extends ChangeNotifier {
   List<FogEvent> fogEvents = [];
   bool get isFreezing => _fogDetector.isFreezing;
 
+  /// Rhythmic cueing (haptic pulses) while a freeze episode is open --
+  /// external rhythmic cueing is a real, published intervention for
+  /// helping a Parkinson's patient break a freezing-of-gait episode
+  /// (unlike the detector itself, this is a response, not a measurement).
+  /// Default tempo (550ms/pulse, ~109 pulses/min) is a reasonable generic
+  /// starting point within the cadence range used in cueing research;
+  /// [configureCueing] overrides it with the patient's own average
+  /// cadence when available, which is the more clinically appropriate
+  /// tempo (cueing at ~the patient's own preferred cadence).
+  Timer? _cueTimer;
+  int _cueIntervalMs = 550;
+  bool isCueingActive = false;
+
   BleProvider() {
     _fogDetector.onEvent = _onFogEvent;
+    _fogDetector.onFreezingChanged = _onFreezingChanged;
   }
 
   void configureSafety({required String? uid, required SafeZone? zone}) {
     _patientUid = uid;
     _safeZone = zone;
     _geofenceTracker.reset();
+  }
+
+  /// Sets the rhythmic-cueing tempo from the patient's own historical
+  /// average cadence (steps/min, both feet combined -- see
+  /// `RecordSummary.cadenceSpm`), if one is available. One haptic pulse
+  /// per step is standard rhythmic-cueing practice, so the pulse interval
+  /// is derived as 60000 / cadence. Ignores implausible values (BLE
+  /// dropouts / near-empty sessions can produce a near-zero or absurdly
+  /// high cadence) rather than let a bad value turn into a useless
+  /// cueing tempo.
+  void configureCueing({double? patientCadenceSpm}) {
+    if (patientCadenceSpm == null || patientCadenceSpm < 40 || patientCadenceSpm > 160) return;
+    _cueIntervalMs = (60000 / patientCadenceSpm).round();
   }
 
   final _parser = InsoleFrameParser();
@@ -301,6 +329,26 @@ class BleProvider extends ChangeNotifier {
     unawaited(_geofenceService
         .recordFogEvent(uid, event)
         .catchError((Object e) => debugPrint('fog recordFogEvent failed: $e')));
+  }
+
+  /// Starts/stops rhythmic haptic cueing the instant a freeze episode
+  /// opens/closes (unlike [_onFogEvent], which only fires after an
+  /// episode ends) -- the whole point of cueing is to help the patient
+  /// break the freeze while it's happening.
+  void _onFreezingChanged(bool freezing) {
+    if (freezing) {
+      _cueTimer?.cancel();
+      isCueingActive = true;
+      HapticFeedback.mediumImpact();
+      _cueTimer = Timer.periodic(Duration(milliseconds: _cueIntervalMs), (_) {
+        HapticFeedback.mediumImpact();
+      });
+    } else {
+      _cueTimer?.cancel();
+      _cueTimer = null;
+      isCueingActive = false;
+    }
+    notifyListeners();
   }
 
   static void _trimLiveWindow(FootLineData data) {
@@ -511,6 +559,7 @@ class BleProvider extends ChangeNotifier {
     }
     _testTimer?.cancel();
     _positionSub?.cancel();
+    _cueTimer?.cancel();
     _frameSink?.close();
     unawaited(CaptureServiceChannel.stop());
     super.dispose();

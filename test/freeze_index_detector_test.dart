@@ -71,5 +71,59 @@ void main() {
       expect(fired!.durationMs, greaterThan(0));
       expect(fired!.peakFreezeIndex, greaterThan(FreezeIndexDetector.freezeIndexThresholdOn));
     });
+
+    test('onFreezingChanged fires true on freeze onset and false on resolution', () {
+      final detector = FreezeIndexDetector(noiseFloor: 100);
+      final transitions = <bool>[];
+      detector.onFreezingChanged = transitions.add;
+
+      const sampleHz = 50;
+      void feedSeconds(double hz, double seconds, int startMs) {
+        final totalSamples = (sampleHz * seconds).round();
+        for (var i = 0; i < totalSamples; i++) {
+          final tMs = startMs + (i * 1000 / sampleHz).round();
+          final value = 500 + 400 * math.sin(2 * math.pi * hz * tMs / 1000);
+          detector.push(tMs, value);
+        }
+      }
+
+      feedSeconds(1.5, 8, 0);
+      expect(transitions, isEmpty);
+
+      feedSeconds(5, 8, 8000);
+      expect(transitions, [true]);
+
+      feedSeconds(1.5, 8, 16000);
+      expect(transitions, [true, false]);
+    });
+
+    test('reset fires onFreezingChanged(false) if called mid-episode', () {
+      final detector = FreezeIndexDetector(noiseFloor: 100);
+      final transitions = <bool>[];
+      detector.onFreezingChanged = transitions.add;
+
+      const sampleHz = 50;
+      final totalSamples = (sampleHz * 8).round();
+      for (var i = 0; i < totalSamples; i++) {
+        final tMs = (i * 1000 / sampleHz).round();
+        final value = 500 + 400 * math.sin(2 * math.pi * 5 * tMs / 1000);
+        detector.push(tMs, value);
+      }
+      expect(detector.isFreezing, isTrue);
+      expect(transitions, [true]);
+
+      detector.reset();
+      expect(detector.isFreezing, isFalse);
+      expect(transitions, [true, false]);
+    });
+
+    test('reset does not fire onFreezingChanged when not mid-episode', () {
+      final detector = FreezeIndexDetector(noiseFloor: 100);
+      final transitions = <bool>[];
+      detector.onFreezingChanged = transitions.add;
+
+      detector.reset();
+      expect(transitions, isEmpty);
+    });
   });
 }

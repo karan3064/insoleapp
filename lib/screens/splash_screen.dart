@@ -34,6 +34,7 @@ class _SplashScreenState extends State<SplashScreen> {
     auth.onLoggedIn = (uid) {
       insole.hydrateFromCloud(uid);
       _loadSafety(ble, uid);
+      _configureCueing(ble, insole);
     };
 
     await Future.wait([
@@ -53,9 +54,22 @@ class _SplashScreenState extends State<SplashScreen> {
       await insole.hydrateFromCloud(auth.uid);
       await _loadSafety(ble, auth.uid);
     }
+    _configureCueing(ble, insole);
 
     if (!mounted) return;
     Navigator.of(context).pushReplacementNamed(isLoggedIn ? '/root' : '/login');
+  }
+
+  /// Sets the FOG rescue-cueing tempo from the patient's own historical
+  /// average cadence (see `BleProvider.configureCueing`), so cueing
+  /// matches their own normal walking rhythm rather than a generic
+  /// default -- a no-op (keeps the default tempo) if there's no history
+  /// yet.
+  void _configureCueing(BleProvider ble, InsoleProvider insole) {
+    final cadences = insole.list.map((r) => r.summary.cadenceSpm).where((c) => c > 0).toList();
+    if (cadences.isEmpty) return;
+    final avg = cadences.reduce((a, b) => a + b) / cadences.length;
+    ble.configureCueing(patientCadenceSpm: avg);
   }
 
   /// Loads the signed-in patient's configured safe zone into `BleProvider`
