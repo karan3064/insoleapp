@@ -59,6 +59,9 @@ class ClinicalReportService {
     buffer.writeln();
     buffer.writeln('Recovery / weight-bearing trend');
     buffer.writeln(_csvField(recovery.summary));
+    if (recovery.conditionContext != null) {
+      buffer.writeln(_csvField(recovery.conditionContext!));
+    }
     return buffer.toString();
   }
 
@@ -122,6 +125,11 @@ class ClinicalReportService {
                         style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11)),
                     pw.SizedBox(height: 4),
                     pw.Text(recovery.summary, style: const pw.TextStyle(fontSize: 10)),
+                    if (recovery.conditionContext != null) ...[
+                      pw.SizedBox(height: 6),
+                      pw.Text(recovery.conditionContext!,
+                          style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+                    ],
                   ],
                 ),
               ),

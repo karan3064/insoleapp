@@ -15,6 +15,14 @@ class UserProfile {
   final String? recoveryMilestoneDate; // ISO date string
   final String? recoveryMilestoneLabel;
 
+  /// Which condition the milestone is for, stored as a `RecoveryCondition`
+  /// enum name (see `recovery_analysis.dart`) -- lets `RecoveryAnalysis`
+  /// attach literature-sourced context specific to that condition (e.g.
+  /// typical ACL-reconstruction recovery timelines) instead of only a
+  /// generic trend. Null/unrecognized values just mean no condition-
+  /// specific context is shown.
+  final String? recoveryConditionType;
+
   const UserProfile({
     this.heightCm,
     this.weightKg,
@@ -24,6 +32,7 @@ class UserProfile {
     this.avatarUrl,
     this.recoveryMilestoneDate,
     this.recoveryMilestoneLabel,
+    this.recoveryConditionType,
   });
 
   static const empty = UserProfile();
@@ -37,6 +46,7 @@ class UserProfile {
     String? avatarUrl,
     String? recoveryMilestoneDate,
     String? recoveryMilestoneLabel,
+    String? recoveryConditionType,
   }) {
     return UserProfile(
       heightCm: heightCm ?? this.heightCm,
@@ -47,6 +57,7 @@ class UserProfile {
       avatarUrl: avatarUrl ?? this.avatarUrl,
       recoveryMilestoneDate: recoveryMilestoneDate ?? this.recoveryMilestoneDate,
       recoveryMilestoneLabel: recoveryMilestoneLabel ?? this.recoveryMilestoneLabel,
+      recoveryConditionType: recoveryConditionType ?? this.recoveryConditionType,
     );
   }
 
@@ -59,6 +70,7 @@ class UserProfile {
         'avatarUrl': avatarUrl,
         'recoveryMilestoneDate': recoveryMilestoneDate,
         'recoveryMilestoneLabel': recoveryMilestoneLabel,
+        'recoveryConditionType': recoveryConditionType,
       };
 
   factory UserProfile.fromJson(Map<String, dynamic> json) => UserProfile(
@@ -70,5 +82,6 @@ class UserProfile {
         avatarUrl: json['avatarUrl'] as String?,
         recoveryMilestoneDate: json['recoveryMilestoneDate'] as String?,
         recoveryMilestoneLabel: json['recoveryMilestoneLabel'] as String?,
+        recoveryConditionType: json['recoveryConditionType'] as String?,
       );
 }

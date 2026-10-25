@@ -226,6 +226,10 @@ class _DetailScreenState extends State<DetailScreen> {
     final recovery = RecoveryAnalysis.compare(
       records: insole.list,
       milestoneDate: DateTime.tryParse(auth.profile.recoveryMilestoneDate ?? ''),
+      condition: RecoveryCondition.values.firstWhere(
+        (c) => c.name == auth.profile.recoveryConditionType,
+        orElse: () => RecoveryCondition.other,
+      ),
     );
 
     final speedMps = record.totalTime > 0 ? record.distanceKm * 1000 / (record.totalTime * 60) : null;

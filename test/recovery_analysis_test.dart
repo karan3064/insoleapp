@@ -113,5 +113,62 @@ void main() {
       expect(result.earlySessionCount + result.recentSessionCount, lessThanOrEqualTo(3));
       expect(result.trend, isNot(RecoveryTrend.insufficientData));
     });
+
+    test('attaches no condition context when condition is other (default)', () {
+      final records = [
+        _record(1, '2024-01-01 09:00', 70),
+        _record(2, '2024-01-20 09:00', 52),
+      ];
+      final result = RecoveryAnalysis.compare(records: records, windowSize: 2);
+      expect(result.conditionContext, isNull);
+    });
+
+    test('attaches ACL-literature context for a knee condition', () {
+      final records = [
+        _record(1, '2024-01-01 09:00', 70),
+        _record(2, '2024-01-20 09:00', 52),
+      ];
+      final result = RecoveryAnalysis.compare(
+        records: records,
+        condition: RecoveryCondition.knee,
+        windowSize: 2,
+      );
+      expect(result.conditionContext, isNotNull);
+      expect(result.conditionContext, contains('ACL-reconstruction'));
+    });
+
+    test('attaches stroke-literature context for a stroke condition', () {
+      final records = [
+        _record(1, '2024-01-01 09:00', 70),
+        _record(2, '2024-01-20 09:00', 52),
+      ];
+      final result = RecoveryAnalysis.compare(
+        records: records,
+        condition: RecoveryCondition.strokeHemiparetic,
+        windowSize: 2,
+      );
+      expect(result.conditionContext, isNotNull);
+      expect(result.conditionContext, contains('paretic'));
+    });
+
+    test('knee context notes early stage when well within 3 months of milestone', () {
+      // Record dates must fall after milestoneDate for the comparison to
+      // include them at all, so these are relative to now rather than
+      // fixed, unlike the other tests above.
+      String fmt(DateTime d) =>
+          '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')} 09:00';
+      final now = DateTime.now();
+      final records = [
+        _record(1, fmt(now.subtract(const Duration(days: 8))), 70),
+        _record(2, fmt(now.subtract(const Duration(days: 3))), 65),
+      ];
+      final result = RecoveryAnalysis.compare(
+        records: records,
+        milestoneDate: now.subtract(const Duration(days: 10)),
+        condition: RecoveryCondition.knee,
+        windowSize: 2,
+      );
+      expect(result.conditionContext, contains('early stage'));
+    });
   });
 }

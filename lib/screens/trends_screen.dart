@@ -34,7 +34,15 @@ class TrendsScreen extends StatelessWidget {
     final p = context.palette;
 
     final milestone = DateTime.tryParse(auth.profile.recoveryMilestoneDate ?? '');
-    final recovery = RecoveryAnalysis.compare(records: insole.list, milestoneDate: milestone);
+    final condition = RecoveryCondition.values.firstWhere(
+      (c) => c.name == auth.profile.recoveryConditionType,
+      orElse: () => RecoveryCondition.other,
+    );
+    final recovery = RecoveryAnalysis.compare(
+      records: insole.list,
+      milestoneDate: milestone,
+      condition: condition,
+    );
 
     final days = _lastNDays(7, 0);
     final previousDays = _lastNDays(7, 7);
@@ -169,6 +177,17 @@ class _RecoveryCard extends StatelessWidget {
                   ),
                 ),
               ],
+            ),
+          ],
+          if (recovery.conditionContext != null) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(color: p.surface2, borderRadius: BorderRadius.circular(10)),
+              child: Text(
+                recovery.conditionContext!,
+                style: TextStyle(color: p.textSecondary, fontSize: 11.5, height: 1.4),
+              ),
             ),
           ],
         ],

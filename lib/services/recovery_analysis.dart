@@ -6,6 +6,14 @@ import '../models/insole_record.dart';
 /// session's raw numbers.
 enum RecoveryTrend { improving, worsening, steady, insufficientData }
 
+/// The condition a recovery milestone is tracking -- lets [RecoveryAnalysis]
+/// attach literature-sourced context specific to that condition (see
+/// [RecoveryAnalysis._conditionContext]) rather than only a generic trend.
+/// Each one is backed by a real, cited source; a condition with no
+/// well-established quantitative reference gets no context attached rather
+/// than a made-up one.
+enum RecoveryCondition { knee, strokeHemiparetic, other }
+
 class RecoveryComparison {
   /// Average right-foot load % (50 = balanced) over the earliest
   /// available sessions -- the "before" baseline.
@@ -20,6 +28,13 @@ class RecoveryComparison {
   final RecoveryTrend trend;
   final String summary;
 
+  /// Literature-sourced context for the patient's condition (e.g. a
+  /// typical ACL-reconstruction recovery timeline), or null when
+  /// [RecoveryCondition.other] is set or no well-established quantitative
+  /// reference exists for the condition. Always cited -- see
+  /// [RecoveryAnalysis._conditionContext].
+  final String? conditionContext;
+
   const RecoveryComparison({
     required this.earlyRightLoadPercent,
     required this.recentRightLoadPercent,
@@ -27,6 +42,7 @@ class RecoveryComparison {
     required this.recentSessionCount,
     required this.trend,
     required this.summary,
+    this.conditionContext,
   });
 }
 
@@ -64,6 +80,7 @@ class RecoveryAnalysis {
   static RecoveryComparison compare({
     required List<InsoleRecord> records,
     DateTime? milestoneDate,
+    RecoveryCondition condition = RecoveryCondition.other,
     int windowSize = 5,
   }) {
     final sorted = [...records]..sort((a, b) => a.date.compareTo(b.date));
@@ -128,7 +145,68 @@ class RecoveryAnalysis {
         earlyDistanceFromBalance: earlyDistanceFromBalance,
         recentDistanceFromBalance: recentDistanceFromBalance,
       ),
+      conditionContext: _conditionContext(condition: condition, milestoneDate: milestoneDate),
     );
+  }
+
+  /// Literature-sourced context for the patient's tracked condition. Each
+  /// branch cites a real published source rather than an invented
+  /// threshold -- see the comments below for exactly what's claimed and
+  /// where it comes from.
+  static String? _conditionContext({
+    required RecoveryCondition condition,
+    required DateTime? milestoneDate,
+  }) {
+    switch (condition) {
+      case RecoveryCondition.knee:
+        // A longitudinal study of 20 unilateral ACL-reconstruction
+        // patients (3-24 months post-op) found vertical-ground-reaction-
+        // force symmetry abnormal at 3 months, mostly normalizing by
+        // 6-12 months, while knee-extension-moment asymmetry could
+        // persist past 24 months. Source: "Progressive alterations in
+        // gait biomechanical symmetry within 2 years after ACL
+        // reconstruction" (pure.bit.edu.cn). This is population-level
+        // literature context, not a prediction for this specific
+        // patient.
+        final monthsSince = milestoneDate == null
+            ? null
+            : DateTime.now().difference(milestoneDate).inDays / 30.44;
+        final stageNote = monthsSince == null
+            ? ''
+            : monthsSince < 3
+                ? ' At this early stage (under 3 months), some weight-bearing asymmetry is expected.'
+                : monthsSince < 6
+                    ? ' Published ACL-reconstruction research found load symmetry still abnormal around this '
+                        'stage (3 months) in most patients, typically normalizing by 6-12 months.'
+                    : monthsSince < 12
+                        ? ' Most patients in published ACL-reconstruction research had load symmetry normalize '
+                            'by this stage (6-12 months) -- if asymmetry is still substantial, it may be worth '
+                            'flagging to the clinician.'
+                        : ' Published research found load/force symmetry typically normalizes well before this '
+                            'stage (12+ months), though some asymmetry (e.g. in knee-extension force) can '
+                            'persist past 2 years in a minority of patients.';
+        return 'Context from published ACL-reconstruction research: weight-bearing asymmetry is common '
+            'and expected in the first few months, typically improving over 6-12 months.$stageNote';
+
+      case RecoveryCondition.strokeHemiparetic:
+        // Van Criekinge et al., 2023 (Scientific Data) -- a real published
+        // cohort of 50 stroke survivors with clinical mobility scores
+        // (Functional Ambulation Category, Tinetti POMA, Trunk Impairment
+        // Scale). Deliberately NOT quoting precise summary statistics
+        // computed from that cohort here -- hand-transcribing many values
+        // off a table risks a wrong number stated with false confidence,
+        // and it's not needed to make the one well-established clinical
+        // point below.
+        return 'Context from published stroke-gait research: temporal/speed symmetry between the paretic '
+            'and non-paretic side can look better than the underlying asymmetry in loading or muscle '
+            'activity actually is -- many stroke survivors compensate to achieve similar step timing on '
+            'both sides even when the affected side bears meaningfully less load. Treat a balanced-looking '
+            'trend here as encouraging but not conclusive on its own; a clinician\'s assessment (e.g. '
+            'Functional Ambulation Category, Tinetti POMA) captures more than weight-bearing alone.';
+
+      case RecoveryCondition.other:
+        return null;
+    }
   }
 
   static double _meanRightLoad(List<InsoleRecord> records) {

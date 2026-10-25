@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../services/health_calc.dart';
+import '../services/recovery_analysis.dart';
 import '../state/auth_provider.dart';
 import '../state/ble_provider.dart';
 import '../theme/app_colors.dart';
@@ -129,10 +130,47 @@ class ProfileScreen extends StatelessWidget {
       firstDate: DateTime(1920),
       lastDate: DateTime.now(),
     );
-    if (picked == null) return;
+    if (picked == null || !context.mounted) return;
     final iso = '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+
+    final condition = await showModalBottomSheet<RecoveryCondition>(
+      context: context,
+      backgroundColor: context.palette.surface,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: Text(
+                'What is this recovering from? Shows relevant research context alongside the trend.',
+                textAlign: TextAlign.center,
+              ),
+            ),
+            ListTile(
+              title: const Text('Knee injury/surgery'),
+              onTap: () => Navigator.pop(context, RecoveryCondition.knee),
+            ),
+            ListTile(
+              title: const Text('Stroke (hemiparetic)'),
+              onTap: () => Navigator.pop(context, RecoveryCondition.strokeHemiparetic),
+            ),
+            ListTile(
+              title: const Text('Other / prefer not to say'),
+              onTap: () => Navigator.pop(context, RecoveryCondition.other),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (condition == null) return;
+
     await auth.updateProfile(
-      auth.profile.copyWith(recoveryMilestoneDate: iso, recoveryMilestoneLabel: label),
+      auth.profile.copyWith(
+        recoveryMilestoneDate: iso,
+        recoveryMilestoneLabel: label,
+        recoveryConditionType: condition.name,
+      ),
     );
   }
 
