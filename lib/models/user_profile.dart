@@ -7,6 +7,14 @@ class UserProfile {
   final String? birthDate; // ISO date string
   final String? avatarUrl;
 
+  /// An optional recovery reference point the patient/clinician can set
+  /// (e.g. "Right knee surgery", dated) -- lets `RecoveryAnalysis` compare
+  /// weight-bearing right after it to the most recent sessions, so
+  /// "how much have they improved" has a concrete before/after instead of
+  /// just a generic recent trend.
+  final String? recoveryMilestoneDate; // ISO date string
+  final String? recoveryMilestoneLabel;
+
   const UserProfile({
     this.heightCm,
     this.weightKg,
@@ -14,6 +22,8 @@ class UserProfile {
     this.sex,
     this.birthDate,
     this.avatarUrl,
+    this.recoveryMilestoneDate,
+    this.recoveryMilestoneLabel,
   });
 
   static const empty = UserProfile();
@@ -25,6 +35,8 @@ class UserProfile {
     String? sex,
     String? birthDate,
     String? avatarUrl,
+    String? recoveryMilestoneDate,
+    String? recoveryMilestoneLabel,
   }) {
     return UserProfile(
       heightCm: heightCm ?? this.heightCm,
@@ -33,6 +45,8 @@ class UserProfile {
       sex: sex ?? this.sex,
       birthDate: birthDate ?? this.birthDate,
       avatarUrl: avatarUrl ?? this.avatarUrl,
+      recoveryMilestoneDate: recoveryMilestoneDate ?? this.recoveryMilestoneDate,
+      recoveryMilestoneLabel: recoveryMilestoneLabel ?? this.recoveryMilestoneLabel,
     );
   }
 
@@ -43,6 +57,8 @@ class UserProfile {
         'sex': sex,
         'birthDate': birthDate,
         'avatarUrl': avatarUrl,
+        'recoveryMilestoneDate': recoveryMilestoneDate,
+        'recoveryMilestoneLabel': recoveryMilestoneLabel,
       };
 
   factory UserProfile.fromJson(Map<String, dynamic> json) => UserProfile(
@@ -52,5 +68,7 @@ class UserProfile {
         sex: json['sex'] as String?,
         birthDate: json['birthDate'] as String?,
         avatarUrl: json['avatarUrl'] as String?,
+        recoveryMilestoneDate: json['recoveryMilestoneDate'] as String?,
+        recoveryMilestoneLabel: json['recoveryMilestoneLabel'] as String?,
       );
 }

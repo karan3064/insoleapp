@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models/insole_record.dart';
+import '../services/recovery_analysis.dart';
+import '../state/auth_provider.dart';
 import '../state/insole_provider.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_palette.dart';
@@ -28,7 +30,11 @@ class TrendsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final insole = context.watch<InsoleProvider>();
+    final auth = context.watch<AuthProvider>();
     final p = context.palette;
+
+    final milestone = DateTime.tryParse(auth.profile.recoveryMilestoneDate ?? '');
+    final recovery = RecoveryAnalysis.compare(records: insole.list, milestoneDate: milestone);
 
     final days = _lastNDays(7, 0);
     final previousDays = _lastNDays(7, 7);
@@ -90,9 +96,104 @@ class TrendsScreen extends StatelessWidget {
             const SizedBox(height: 20),
             _ChartCard(
                 title: 'Steps (7d)', values: stepCounts, labels: labels, color: p.textSecondary),
+            if (recovery.trend != RecoveryTrend.insufficientData) ...[
+              const SizedBox(height: 20),
+              _RecoveryCard(
+                recovery: recovery,
+                milestoneLabel: auth.profile.recoveryMilestoneLabel,
+              ),
+            ],
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Translates `RecoveryAnalysis`'s weight-bearing comparison into a card a
+/// physiotherapist or patient can read directly -- the whole point being
+/// that raw FSR pressure values and a heatmap mean nothing to a clinician
+/// on their own; this says in plain language which foot carries more load
+/// and whether that's gotten better or worse across sessions.
+class _RecoveryCard extends StatelessWidget {
+  final RecoveryComparison recovery;
+  final String? milestoneLabel;
+
+  const _RecoveryCard({required this.recovery, required this.milestoneLabel});
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    final (icon, color) = switch (recovery.trend) {
+      RecoveryTrend.improving => (Icons.trending_up, AppColors.success),
+      RecoveryTrend.worsening => (Icons.trending_down, AppColors.warning),
+      RecoveryTrend.steady => (Icons.trending_flat, p.textSecondary),
+      RecoveryTrend.insufficientData => (Icons.info_outline, p.textSecondary),
+    };
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: p.card(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: color),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  milestoneLabel != null ? 'Recovery progress since $milestoneLabel' : 'Weight-bearing trend',
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(recovery.summary, style: TextStyle(color: p.text, fontSize: 13, height: 1.4)),
+          if (recovery.earlyRightLoadPercent != null && recovery.recentRightLoadPercent != null) ...[
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: _LoadStat(
+                    label: 'Earlier (${recovery.earlySessionCount} sessions)',
+                    rightLoadPercent: recovery.earlyRightLoadPercent!,
+                  ),
+                ),
+                Icon(Icons.arrow_forward, color: p.textTertiary, size: 16),
+                Expanded(
+                  child: _LoadStat(
+                    label: 'Recent (${recovery.recentSessionCount} sessions)',
+                    rightLoadPercent: recovery.recentRightLoadPercent!,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _LoadStat extends StatelessWidget {
+  final String label;
+  final double rightLoadPercent;
+  const _LoadStat({required this.label, required this.rightLoadPercent});
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    final side = rightLoadPercent > 50 ? 'Right' : 'Left';
+    final pct = (50 + (rightLoadPercent - 50).abs()).toStringAsFixed(0);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Text(label, style: TextStyle(color: p.textSecondary, fontSize: 11), textAlign: TextAlign.center),
+        const SizedBox(height: 4),
+        Text('$side $pct%', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+      ],
     );
   }
 }

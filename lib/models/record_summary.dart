@@ -28,6 +28,18 @@ class RecordSummary {
   final int wholePct;
   final int lFront, rFront, lMid, rMid, lRear, rRear;
   final int balancePercent;
+
+  /// Which foot is bearing more load, as a percentage: 50 = perfectly
+  /// balanced, above 50 = right foot bearing more, below 50 = left foot
+  /// bearing more (e.g. 62 means the right foot carried 62% of the
+  /// combined load). Unlike [balancePercent] (a magnitude-only symmetry
+  /// score), this is the number a physiotherapist tracking post-surgery
+  /// weight-bearing actually wants: which side, and by how much -- and
+  /// its trend across sessions is what shows real recovery (see
+  /// `RecoveryAnalysis`). Defaults to 50 (not 0) when there's no load
+  /// signal, since "no data" should read as neutral, not "all on the
+  /// left foot".
+  final double rightLoadPercent;
   final ClinicalGaitReport clinical;
 
   /// Freezing-of-Gait episodes detected during this session (see
@@ -60,6 +72,7 @@ class RecordSummary {
     required this.balancePercent,
     required this.clinical,
     this.fogEvents = const [],
+    this.rightLoadPercent = 50,
   });
 
   static const _frontKeys = ['data', 'data2', 'data3', 'data4', 'data5', 'data6', 'data7', 'data8'];
@@ -111,6 +124,7 @@ class RecordSummary {
       balancePercent: GaitAnalysis.calculateBalance(lFoot, rFoot),
       clinical: clinical,
       fogEvents: fogEvents,
+      rightLoadPercent: (lFoot + rFoot) > 0 ? (rFoot / (lFoot + rFoot) * 100) : 50,
     );
   }
 
@@ -140,6 +154,7 @@ class RecordSummary {
     balancePercent: 0,
     clinical: ClinicalGaitReport.empty,
     fogEvents: const [],
+    rightLoadPercent: 50,
   );
 
   Map<String, dynamic> toJson() => {
@@ -165,6 +180,7 @@ class RecordSummary {
         'balancePercent': balancePercent,
         'clinical': clinical.toJson(),
         'fogEvents': fogEvents.map((e) => e.toJson()).toList(),
+        'rightLoadPercent': rightLoadPercent,
       };
 
   factory RecordSummary.fromJson(Map<String, dynamic> json) => RecordSummary(
@@ -194,5 +210,6 @@ class RecordSummary {
         fogEvents: ((json['fogEvents'] as List?) ?? const [])
             .map((e) => FogEvent.fromJson(Map<String, dynamic>.from(e as Map)))
             .toList(),
+        rightLoadPercent: (json['rightLoadPercent'] as num?)?.toDouble() ?? 50,
       );
 }

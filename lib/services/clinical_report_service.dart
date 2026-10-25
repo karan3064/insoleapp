@@ -6,6 +6,7 @@ import 'package:pdf/widgets.dart' as pw;
 import '../models/insole_record.dart';
 import '../models/user_profile.dart';
 import 'clinical_gait_analysis.dart';
+import 'recovery_analysis.dart';
 
 /// Builds a clinician-facing export of one session's clinical gait metrics,
 /// as CSV (for spreadsheets/EHR import) or PDF (for printing/sharing).
@@ -40,6 +41,7 @@ class ClinicalReportService {
     required InsoleRecord record,
     required ClinicalGaitReport gait,
     required UserProfile profile,
+    required RecoveryComparison recovery,
     String? patientEmail,
   }) {
     final buffer = StringBuffer();
@@ -48,12 +50,22 @@ class ClinicalReportService {
     buffer.writeln('Session,${_csvField(record.name)}');
     buffer.writeln('Date,${_csvField(record.date)}');
     buffer.writeln('Duration (s),${record.time}');
+    buffer.writeln('Weight bearing (this session),${_csvField(_loadLabel(record.summary.rightLoadPercent))}');
     buffer.writeln();
     buffer.writeln('Metric,Value,Unit');
     for (final m in _metrics(gait)) {
       buffer.writeln('${_csvField(m.label)},${_csvField(m.value)},${_csvField(m.unit)}');
     }
+    buffer.writeln();
+    buffer.writeln('Recovery / weight-bearing trend');
+    buffer.writeln(_csvField(recovery.summary));
     return buffer.toString();
+  }
+
+  static String _loadLabel(double rightLoadPercent) {
+    final side = rightLoadPercent > 50 ? 'Right' : 'Left';
+    final pct = (50 + (rightLoadPercent - 50).abs()).toStringAsFixed(0);
+    return '$side foot $pct%';
   }
 
   static String _csvField(String value) {
@@ -67,6 +79,7 @@ class ClinicalReportService {
     required InsoleRecord record,
     required ClinicalGaitReport gait,
     required UserProfile profile,
+    required RecoveryComparison recovery,
     String? patientEmail,
   }) async {
     final doc = pw.Document();
@@ -94,6 +107,24 @@ class ClinicalReportService {
               _pdfInfoRow('Duration', '${record.time} s'),
               if (profile.heightCm != null) _pdfInfoRow('Height', '${profile.heightCm!.toStringAsFixed(0)} cm'),
               if (profile.weightKg != null) _pdfInfoRow('Weight', '${profile.weightKg!.toStringAsFixed(0)} kg'),
+              _pdfInfoRow('Weight bearing (this session)', _loadLabel(record.summary.rightLoadPercent)),
+              pw.SizedBox(height: 16),
+              pw.Container(
+                padding: const pw.EdgeInsets.all(10),
+                decoration: pw.BoxDecoration(
+                  color: PdfColors.grey100,
+                  borderRadius: pw.BorderRadius.circular(6),
+                ),
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text('Recovery / weight-bearing trend',
+                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11)),
+                    pw.SizedBox(height: 4),
+                    pw.Text(recovery.summary, style: const pw.TextStyle(fontSize: 10)),
+                  ],
+                ),
+              ),
               pw.SizedBox(height: 20),
               pw.Text('Clinical gait metrics', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
               pw.SizedBox(height: 8),

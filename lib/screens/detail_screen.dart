@@ -17,6 +17,7 @@ import '../services/clinical_report_service.dart';
 import '../services/format_utils.dart';
 import '../services/gait_screening_model.dart';
 import '../services/health_calc.dart';
+import '../services/recovery_analysis.dart';
 import '../services/session_file_store.dart';
 import '../state/auth_provider.dart';
 import '../state/insole_provider.dart';
@@ -132,6 +133,7 @@ class _DetailScreenState extends State<DetailScreen> {
     RecordSummary summary,
     UserProfile profile,
     String? email,
+    RecoveryComparison recovery,
   ) async {
     await showModalBottomSheet(
       context: context,
@@ -145,7 +147,7 @@ class _DetailScreenState extends State<DetailScreen> {
               subtitle: const Text('For printing or sharing with a clinician'),
               onTap: () {
                 Navigator.pop(sheetContext);
-                _exportPdf(record, summary, profile, email);
+                _exportPdf(record, summary, profile, email, recovery);
               },
             ),
             ListTile(
@@ -154,7 +156,7 @@ class _DetailScreenState extends State<DetailScreen> {
               subtitle: const Text('For spreadsheets or EHR import'),
               onTap: () {
                 Navigator.pop(sheetContext);
-                _exportCsv(record, summary, profile, email);
+                _exportCsv(record, summary, profile, email, recovery);
               },
             ),
           ],
@@ -168,12 +170,14 @@ class _DetailScreenState extends State<DetailScreen> {
     RecordSummary summary,
     UserProfile profile,
     String? email,
+    RecoveryComparison recovery,
   ) async {
     final bytes = await ClinicalReportService.buildPdf(
       record: record,
       gait: summary.clinical,
       profile: profile,
       patientEmail: email,
+      recovery: recovery,
     );
     await Printing.sharePdf(bytes: bytes, filename: '${record.name}_gait_report.pdf');
   }
@@ -183,10 +187,12 @@ class _DetailScreenState extends State<DetailScreen> {
     RecordSummary summary,
     UserProfile profile,
     String? email,
+    RecoveryComparison recovery,
   ) async {
     final csv = ClinicalReportService.buildCsv(
       record: record,
       gait: summary.clinical,
+      recovery: recovery,
       profile: profile,
       patientEmail: email,
     );
@@ -212,9 +218,15 @@ class _DetailScreenState extends State<DetailScreen> {
     }
 
     final auth = context.watch<AuthProvider>();
+    final insole = context.watch<InsoleProvider>();
     final summary = record.summary;
     final gait = summary.clinical;
     final frames = _frames;
+
+    final recovery = RecoveryAnalysis.compare(
+      records: insole.list,
+      milestoneDate: DateTime.tryParse(auth.profile.recoveryMilestoneDate ?? ''),
+    );
 
     final speedMps = record.totalTime > 0 ? record.distanceKm * 1000 / (record.totalTime * 60) : null;
     final screening = GaitScreeningModel.predict(gait: gait, speedMps: speedMps);
@@ -237,7 +249,7 @@ class _DetailScreenState extends State<DetailScreen> {
           IconButton(
             icon: const Icon(Icons.ios_share),
             tooltip: 'Export clinical report',
-            onPressed: () => _showExportSheet(record, summary, auth.profile, auth.email),
+            onPressed: () => _showExportSheet(record, summary, auth.profile, auth.email, recovery),
           ),
         ],
       ),

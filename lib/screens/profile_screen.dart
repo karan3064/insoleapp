@@ -96,6 +96,46 @@ class ProfileScreen extends StatelessWidget {
     await auth.updateProfile(auth.profile.copyWith(birthDate: iso));
   }
 
+  /// Sets a recovery reference point (e.g. a surgery date) so the Trends
+  /// screen's recovery card and the exported clinical report can compare
+  /// weight-bearing right after it to the most recent sessions -- see
+  /// `RecoveryAnalysis`.
+  Future<void> _setRecoveryMilestone(BuildContext context, AuthProvider auth) async {
+    final labelController = TextEditingController(text: auth.profile.recoveryMilestoneLabel ?? '');
+    final label = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: context.palette.surface,
+        title: const Text('Recovery milestone label'),
+        content: TextField(
+          controller: labelController,
+          autofocus: true,
+          decoration: const InputDecoration(hintText: 'e.g. Right knee surgery'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, labelController.text),
+            child: const Text('Next: pick date'),
+          ),
+        ],
+      ),
+    );
+    if (label == null || label.isEmpty || !context.mounted) return;
+
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime.tryParse(auth.profile.recoveryMilestoneDate ?? '') ?? DateTime.now(),
+      firstDate: DateTime(1920),
+      lastDate: DateTime.now(),
+    );
+    if (picked == null) return;
+    final iso = '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+    await auth.updateProfile(
+      auth.profile.copyWith(recoveryMilestoneDate: iso, recoveryMilestoneLabel: label),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
@@ -171,6 +211,13 @@ class ProfileScreen extends StatelessWidget {
                   current: profile.weightKg,
                   onSave: (v) => auth.updateProfile(profile.copyWith(weightKg: v)),
                 ),
+              ),
+              _SettingsRow(
+                label: 'Recovery milestone',
+                value: profile.recoveryMilestoneLabel != null
+                    ? '${profile.recoveryMilestoneLabel} (${profile.recoveryMilestoneDate})'
+                    : 'Set',
+                onTap: () => _setRecoveryMilestone(context, auth),
                 last: true,
               ),
             ]),
