@@ -201,7 +201,7 @@ exports.chatAboutSession = onCall(
 
 /** POSTs to the Gemini `generateContent` API and returns the concatenated text content. */
 async function callGemini({systemInstruction, contents, maxOutputTokens}) {
-  const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+  const model = process.env.GEMINI_MODEL || "gemini-3.8-flash";
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent` +
     `?key=${geminiApiKey.value()}`;
 
