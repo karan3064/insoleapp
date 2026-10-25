@@ -77,11 +77,16 @@ class _GatherScreenState extends State<GatherScreen> {
                   ),
                   const SizedBox(height: 16),
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      if (_heatMode) const HeatLegend(),
+                      if (_heatMode) ...[const HeatLegend(), const SizedBox(width: 16)],
                       FootPressureView(grid: ble.grid, isRight: false, heatMode: _heatMode),
+                      // A clear gap (not a drawn boundary around either foot) is
+                      // what actually tells the two feet apart now that neither
+                      // has an outline -- without it they read as one scattered
+                      // cloud of points.
+                      const SizedBox(width: 28),
                       FootPressureView(grid: ble.grid, isRight: true, heatMode: _heatMode),
                     ],
                   ),

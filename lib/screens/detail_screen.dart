@@ -276,11 +276,12 @@ class _DetailScreenState extends State<DetailScreen> {
                   _ModeToggle(heatMode: _heatMode, onChanged: (v) => setState(() => _heatMode = v)),
                   const SizedBox(height: 16),
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      if (_heatMode) const HeatLegend(),
+                      if (_heatMode) ...[const HeatLegend(), const SizedBox(width: 16)],
                       FootPressureView(grid: _grid, isRight: false, heatMode: _heatMode),
+                      const SizedBox(width: 28),
                       FootPressureView(grid: _grid, isRight: true, heatMode: _heatMode),
                     ],
                   ),

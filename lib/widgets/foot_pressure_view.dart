@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 
 import '../models/foot_point_layout.dart';
@@ -164,21 +166,16 @@ class _FootPainter extends CustomPainter {
       final t = (v / maxValue).clamp(0.0, 1.0);
 
       if (heatMode) {
-        // Large, overlapping radii spread each hot spot into its
-        // surroundings so neighboring loaded sensors read as one smooth
-        // gradient rather than separate dots.
-        final radius = size.width * (0.30 + 0.16 * t);
-        // A flat-then-fading falloff (full color held out to 40% of the
-        // radius, then fading) reads as a soft blur, closer to a real
-        // interpolated pressure map, instead of a hard-centered dot that
-        // immediately starts fading from the very center.
-        final color = _rampColor(t);
-        final gradient = RadialGradient(
-          colors: [color, color, color.withValues(alpha: 0.0)],
-          stops: const [0.0, 0.4, 1.0],
-        );
-        final rect = Rect.fromCircle(center: pos, radius: radius);
-        final paint = Paint()..shader = gradient.createShader(rect);
+        // A real Gaussian blur (not a radial-gradient alpha fade) is what
+        // makes neighboring hot spots melt into one continuous blob
+        // instead of reading as a cluster of distinct overlapping
+        // circles -- a gradient's edge, however soft, is still a crisp
+        // boundary once two of them overlap at the same alpha; a blur
+        // genuinely diffuses the pixels themselves.
+        final radius = size.width * (0.17 + 0.10 * t);
+        final paint = Paint()
+          ..color = _rampColor(t)
+          ..maskFilter = ui.MaskFilter.blur(ui.BlurStyle.normal, radius * 0.7);
         canvas.drawCircle(pos, radius, paint);
       } else {
         final radius = size.width * (0.05 + 0.05 * t);
