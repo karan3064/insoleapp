@@ -17,6 +17,7 @@ import '../services/clinical_gait_analysis.dart';
 import '../services/clinical_report_service.dart';
 import '../services/format_utils.dart';
 import '../services/gait_screening_model.dart';
+import '../services/ai_narrative_service.dart';
 import '../services/health_calc.dart';
 import '../services/personal_baseline_model.dart';
 import '../services/recovery_analysis.dart';
@@ -57,6 +58,46 @@ class _DetailScreenState extends State<DetailScreen> {
   /// needs no frame data at all.
   List<PressureFrame>? _frames;
   final _fileStore = SessionFileStore();
+
+  // Set at the top of build() each time, so `_generateNarrative` (triggered
+  // from a button tap, not from build) can read the same already-computed
+  // findings the screen is currently showing, without recomputing them.
+  RecordSummary? _lastSummary;
+  RecoveryComparison? _lastRecovery;
+  PersonalBaselineResult? _lastPersonalBaseline;
+  GaitScreeningResult? _lastScreening;
+
+  String? _narrative;
+  bool _narrativeLoading = false;
+  String? _narrativeError;
+
+  Future<void> _generateNarrative() async {
+    final summary = _lastSummary;
+    if (summary == null) return;
+    setState(() {
+      _narrativeLoading = true;
+      _narrativeError = null;
+    });
+    try {
+      final narrative = await AiNarrativeService.generateSessionNarrative(
+        summary: summary,
+        recoverySummary: _lastRecovery?.summary,
+        personalBaselineSummary: _lastPersonalBaseline?.summary,
+        screening: _lastScreening,
+      );
+      if (!mounted) return;
+      setState(() {
+        _narrative = narrative;
+        _narrativeLoading = false;
+      });
+    } on AiNarrativeException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _narrativeError = e.message;
+        _narrativeLoading = false;
+      });
+    }
+  }
 
   @override
   void didChangeDependencies() {
@@ -237,6 +278,10 @@ class _DetailScreenState extends State<DetailScreen> {
     final speedMps = record.totalTime > 0 ? record.distanceKm * 1000 / (record.totalTime * 60) : null;
     final screening = GaitScreeningModel.predict(gait: gait, speedMps: speedMps);
     final personalBaseline = PersonalBaselineModel.evaluate(history: insole.list, current: record);
+    _lastSummary = summary;
+    _lastRecovery = recovery;
+    _lastPersonalBaseline = personalBaseline;
+    _lastScreening = screening;
     final strideLengthM = ClinicalGaitAnalysis.strideLengthMeters(
       distanceKm: record.distanceKm,
       leftStepCount: gait.left.stepCount,
@@ -462,6 +507,13 @@ class _DetailScreenState extends State<DetailScreen> {
             ],
             const SizedBox(height: 20),
             _PersonalBaselineCard(result: personalBaseline),
+            const SizedBox(height: 20),
+            _AiNarrativeCard(
+              narrative: _narrative,
+              loading: _narrativeLoading,
+              error: _narrativeError,
+              onGenerate: _generateNarrative,
+            ),
             if (record.path.isNotEmpty) ...[
               const SizedBox(height: 20),
               GpsPathMap(path: record.path),
@@ -593,6 +645,66 @@ class _PersonalBaselineCard extends StatelessWidget {
                   style: TextStyle(color: p.textTertiary, fontSize: 11),
                 ),
               ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// On-demand button + result panel for `AiNarrativeService`. Nothing is
+/// sent anywhere until the patient/clinician explicitly taps "Generate" --
+/// this never calls out automatically on screen load.
+class _AiNarrativeCard extends StatelessWidget {
+  final String? narrative;
+  final bool loading;
+  final String? error;
+  final VoidCallback onGenerate;
+
+  const _AiNarrativeCard({
+    required this.narrative,
+    required this.loading,
+    required this.error,
+    required this.onGenerate,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: p.card(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text('AI session summary', style: TextStyle(fontWeight: FontWeight.w700)),
+              ),
+              TextButton.icon(
+                onPressed: loading ? null : onGenerate,
+                icon: loading
+                    ? const SizedBox(
+                        width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.auto_awesome, size: 18),
+                label: Text(narrative == null ? 'Generate' : 'Regenerate'),
+              ),
+            ],
+          ),
+          if (narrative != null) ...[
+            const SizedBox(height: 8),
+            Text(narrative!, style: TextStyle(color: p.textSecondary, fontSize: 13)),
+          ] else if (error != null) ...[
+            const SizedBox(height: 8),
+            Text(error!, style: const TextStyle(color: AppColors.warning, fontSize: 12)),
+          ] else if (!loading) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Turns this session\'s metrics into a plain-language summary -- written from '
+              'the numbers above, not a new analysis of its own.',
+              style: TextStyle(color: p.textTertiary, fontSize: 11),
             ),
           ],
         ],
