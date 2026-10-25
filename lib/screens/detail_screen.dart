@@ -15,6 +15,7 @@ import '../models/record_summary.dart';
 import '../models/user_profile.dart';
 import '../services/clinical_report_service.dart';
 import '../services/format_utils.dart';
+import '../services/gait_screening_model.dart';
 import '../services/health_calc.dart';
 import '../services/session_file_store.dart';
 import '../state/auth_provider.dart';
@@ -214,6 +215,9 @@ class _DetailScreenState extends State<DetailScreen> {
     final summary = record.summary;
     final gait = summary.clinical;
     final frames = _frames;
+
+    final speedMps = record.totalTime > 0 ? record.distanceKm * 1000 / (record.totalTime * 60) : null;
+    final screening = GaitScreeningModel.predict(gait: gait, speedMps: speedMps);
 
     final calorie = HealthCalc.calculateCalories(record.distanceKm, auth.profile.weightKg);
     final target = (calorie / 5000 * 100).round();
@@ -416,6 +420,10 @@ class _DetailScreenState extends State<DetailScreen> {
                 ],
               ),
             ),
+            if (screening != null) ...[
+              const SizedBox(height: 20),
+              _GaitScreeningCard(result: screening),
+            ],
             if (record.path.isNotEmpty) ...[
               const SizedBox(height: 20),
               GpsPathMap(path: record.path),
@@ -441,6 +449,55 @@ class _DetailScreenState extends State<DetailScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Shows [GaitScreeningModel]'s output as a qualitative band only, never a
+/// raw percentage -- see that class's doc comment for why a precise number
+/// would overstate how confident this model actually is. Deliberately
+/// paired with an always-visible disclaimer, not a one-time tooltip.
+class _GaitScreeningCard extends StatelessWidget {
+  final GaitScreeningResult result;
+  const _GaitScreeningCard({required this.result});
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    final (label, color) = switch (result.band) {
+      GaitScreeningBand.low => ('Low signal', AppColors.success),
+      GaitScreeningBand.inconclusive => ('Inconclusive', AppColors.warning),
+      GaitScreeningBand.elevated => ('Elevated signal', AppColors.warning),
+    };
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: p.card(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text('Gait pattern screening', style: TextStyle(fontWeight: FontWeight.w700)),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(color: color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(999)),
+                child: Text(label, style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 12)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'An experimental signal comparing this session\'s gait pattern to a research '
+            'dataset of Parkinson\'s patients and healthy adults. This is NOT a diagnosis, '
+            'has not been validated on this app\'s own hardware, and should never replace '
+            'a clinician\'s assessment -- treat it only as a prompt to discuss with one.',
+            style: TextStyle(color: p.textSecondary, fontSize: 11),
+          ),
+        ],
       ),
     );
   }

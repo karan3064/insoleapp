@@ -44,6 +44,17 @@ class FootGaitMetrics {
   }
 
   double? get stanceTimeMeanMs => ClinicalGaitAnalysis._mean(stanceTimesMs);
+  double? get stanceTimeSdMs => ClinicalGaitAnalysis._stdDev(stanceTimesMs);
+
+  /// Stance-time coefficient of variation, as a percentage -- used
+  /// (alongside stride/swing-time CV) as a feature by `GaitScreeningModel`.
+  double? get stanceTimeCvPercent {
+    final mean = stanceTimeMeanMs;
+    final sd = stanceTimeSdMs;
+    if (mean == null || mean == 0 || sd == null) return null;
+    return sd / mean * 100;
+  }
+
   double? get swingTimeMeanMs => ClinicalGaitAnalysis._mean(swingTimesMs);
   double? get swingTimeSdMs => ClinicalGaitAnalysis._stdDev(swingTimesMs);
 
