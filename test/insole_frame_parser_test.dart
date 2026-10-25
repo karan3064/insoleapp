@@ -37,13 +37,17 @@ void main() {
     final frame = parser.feed(_hexToBytes(footerChunk));
     expect(frame, isNotNull);
 
-    // left point 0 -> grid[0][5], sourced from list[12] (raw index 12).
-    final expectedLeft0 = ((200 + 13 * 10) / 50).round();
+    // left point 0 -> grid[0][5], sourced from list[33] (raw index 33).
+    // (Confirmed by physical device testing: pressing the physical left
+    // insole was showing up as the rightmost position on screen, i.e.
+    // _leftListIndex/_rightListIndex were crossed relative to
+    // FootPointLayout -- see InsoleFrameParser.feed.)
+    final expectedLeft0 = ((200 + 34 * 10) / 50).round();
     expect(frame!.grid[0][5], expectedLeft0);
     expect(frame.leftPoints[0], expectedLeft0);
 
-    // right point 0 -> grid[0][11], sourced from list[33] (raw index 33).
-    final expectedRight0 = ((200 + 34 * 10) / 50).round();
+    // right point 0 -> grid[0][11], sourced from list[12] (raw index 12).
+    final expectedRight0 = ((200 + 13 * 10) / 50).round();
     expect(frame.grid[0][11], expectedRight0);
     expect(frame.rightPoints[0], expectedRight0);
 

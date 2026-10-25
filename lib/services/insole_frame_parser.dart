@@ -92,14 +92,22 @@ class InsoleFrameParser {
       final leftPoints = <int>[];
       final rightPoints = <int>[];
 
+      // Confirmed by physical device testing that these were crossed:
+      // pressing a sensor on the physical left insole lit up the
+      // rightmost position on screen. _leftListIndex/_rightListIndex are
+      // raw byte-offset tables ported from the original app, not
+      // semantically validated against this app's own FootPointLayout
+      // naming -- they decode to the opposite foot from what their names
+      // suggest, so the two are swapped here (not renamed, to keep this
+      // fix a minimal, obviously-reversible one-line-per-loop change).
       for (var i = 0; i < FootPointLayout.left.length; i++) {
-        final v = _at(list, _leftListIndex[i]);
+        final v = _at(list, _rightListIndex[i]);
         final rc = FootPointLayout.left[i];
         grid[rc[0]][rc[1]] = v;
         leftPoints.add(v);
       }
       for (var i = 0; i < FootPointLayout.right.length; i++) {
-        final v = _at(list, _rightListIndex[i]);
+        final v = _at(list, _leftListIndex[i]);
         final rc = FootPointLayout.right[i];
         grid[rc[0]][rc[1]] = v;
         rightPoints.add(v);
