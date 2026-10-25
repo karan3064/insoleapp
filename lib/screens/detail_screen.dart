@@ -13,6 +13,7 @@ import '../models/insole_record.dart';
 import '../models/pressure_frame.dart';
 import '../models/record_summary.dart';
 import '../models/user_profile.dart';
+import '../services/clinical_gait_analysis.dart';
 import '../services/clinical_report_service.dart';
 import '../services/format_utils.dart';
 import '../services/gait_screening_model.dart';
@@ -234,6 +235,11 @@ class _DetailScreenState extends State<DetailScreen> {
 
     final speedMps = record.totalTime > 0 ? record.distanceKm * 1000 / (record.totalTime * 60) : null;
     final screening = GaitScreeningModel.predict(gait: gait, speedMps: speedMps);
+    final strideLengthM = ClinicalGaitAnalysis.strideLengthMeters(
+      distanceKm: record.distanceKm,
+      leftStepCount: gait.left.stepCount,
+      rightStepCount: gait.right.stepCount,
+    );
 
     final calorie = HealthCalc.calculateCalories(record.distanceKm, auth.profile.weightKg);
     final target = (calorie / 5000 * 100).round();
@@ -321,6 +327,12 @@ class _DetailScreenState extends State<DetailScreen> {
                 Expanded(child: _StatBox(label: 'Distance', value: '${record.distanceKm.toStringAsFixed(2)} km')),
                 Expanded(child: _StatBox(label: 'Time', value: '${record.totalTime} min')),
                 Expanded(child: _StatBox(label: 'Pace', value: '${record.pace} /km')),
+                Expanded(
+                  child: _StatBox(
+                    label: 'Stride length',
+                    value: strideLengthM != null ? '${strideLengthM.toStringAsFixed(2)} m' : '--',
+                  ),
+                ),
               ],
             ),
             Row(

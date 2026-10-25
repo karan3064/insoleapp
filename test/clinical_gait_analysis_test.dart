@@ -143,6 +143,34 @@ void main() {
       expect(report.left.stepCount, 2);
     });
 
+    test('strideLengthMeters computes distance over average stride count', () {
+      // 100m covered, 50 strides on each foot -> 2m per stride.
+      final result = ClinicalGaitAnalysis.strideLengthMeters(
+        distanceKm: 0.1,
+        leftStepCount: 50,
+        rightStepCount: 50,
+      );
+      expect(result, closeTo(2.0, 0.001));
+    });
+
+    test('strideLengthMeters returns null with no GPS distance', () {
+      final result = ClinicalGaitAnalysis.strideLengthMeters(
+        distanceKm: 0,
+        leftStepCount: 50,
+        rightStepCount: 50,
+      );
+      expect(result, isNull);
+    });
+
+    test('strideLengthMeters returns null with no detected strides', () {
+      final result = ClinicalGaitAnalysis.strideLengthMeters(
+        distanceKm: 0.1,
+        leftStepCount: 0,
+        rightStepCount: 0,
+      );
+      expect(result, isNull);
+    });
+
     test('handles no frame data without throwing', () {
       final report = ClinicalGaitAnalysis.analyze(
         line: FootLineData(),

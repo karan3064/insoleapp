@@ -334,6 +334,23 @@ class ClinicalGaitAnalysis {
     return overlap;
   }
 
+  /// Average stride length in meters: GPS distance covered divided by the
+  /// average per-foot stride count. Returns null when there's no usable
+  /// GPS distance (e.g. an indoor session, where GPS is unreliable to the
+  /// point of being meaningless -- see `InsoleRecord.distanceKm`) or no
+  /// detected strides, rather than a divide-by-zero or a number that
+  /// looks precise but isn't physically meaningful.
+  static double? strideLengthMeters({
+    required double distanceKm,
+    required int leftStepCount,
+    required int rightStepCount,
+  }) {
+    if (distanceKm <= 0) return null;
+    final avgStrideCount = (leftStepCount + rightStepCount) / 2;
+    if (avgStrideCount <= 0) return null;
+    return distanceKm * 1000 / avgStrideCount;
+  }
+
   static double? _symmetryIndex(double? l, double? r) {
     if (l == null || r == null) return null;
     final avg = (l + r) / 2;

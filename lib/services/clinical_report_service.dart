@@ -19,8 +19,20 @@ class ClinicalReportService {
   static String _fmtOr(double? v, String fallback, {int decimals = 1}) =>
       v == null ? fallback : v.toStringAsFixed(decimals);
 
-  static List<_Metric> _metrics(ClinicalGaitReport gait) => [
+  static List<_Metric> _metrics(ClinicalGaitReport gait, double distanceKm) => [
         _Metric('Cadence', _fmtOr(gait.cadenceStepsPerMin, '--'), 'steps/min'),
+        _Metric(
+          'Stride length',
+          _fmtOr(
+            ClinicalGaitAnalysis.strideLengthMeters(
+              distanceKm: distanceKm,
+              leftStepCount: gait.left.stepCount,
+              rightStepCount: gait.right.stepCount,
+            ),
+            '--',
+          ),
+          'm',
+        ),
         _Metric('Double support', _fmtOr(gait.doubleSupportPercent, '--'), '%'),
         _Metric('Single support', _fmtOr(gait.singleSupportPercent, '--'), '%'),
         _Metric('Stride time (left)', _fmtOr(gait.left.strideTimeMeanMs, '--', decimals: 0), 'ms'),
@@ -53,7 +65,7 @@ class ClinicalReportService {
     buffer.writeln('Weight bearing (this session),${_csvField(_loadLabel(record.summary.rightLoadPercent))}');
     buffer.writeln();
     buffer.writeln('Metric,Value,Unit');
-    for (final m in _metrics(gait)) {
+    for (final m in _metrics(gait, record.distanceKm)) {
       buffer.writeln('${_csvField(m.label)},${_csvField(m.value)},${_csvField(m.unit)}');
     }
     buffer.writeln();
@@ -86,7 +98,7 @@ class ClinicalReportService {
     String? patientEmail,
   }) async {
     final doc = pw.Document();
-    final metrics = _metrics(gait);
+    final metrics = _metrics(gait, record.distanceKm);
 
     doc.addPage(
       pw.Page(
