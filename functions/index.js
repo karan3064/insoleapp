@@ -8,7 +8,7 @@ const nodemailer = require("nodemailer");
 admin.initializeApp();
 setGlobalOptions({maxInstances: 10});
 
-const anthropicApiKey = defineSecret("ANTHROPIC_API_KEY");
+const geminiApiKey = defineSecret("GEMINI_API_KEY");
 
 /**
  * Fires when the NurvoSync app records a safe-zone breach (see
@@ -86,7 +86,7 @@ exports.onFogAlertCreated = onDocumentCreated(
 
 /**
  * Turns one session's already-computed gait metrics into a short,
- * plain-language narrative via the Claude API -- never given raw sensor
+ * plain-language narrative via the Gemini API -- never given raw sensor
  * frames, only the small set of numbers `RecordSummary`/`ClinicalGaitReport`
  * already compute on the client (see `AiNarrativeService` on the client for
  * exactly what's sent). This is a narration layer on top of the app's own
@@ -98,16 +98,17 @@ exports.onFogAlertCreated = onDocumentCreated(
  * Requires:
  *  - This project on the Blaze plan (external network calls aren't allowed
  *    on Spark, same as every other Cloud Function here).
- *  - `firebase functions:secrets:set ANTHROPIC_API_KEY` run once, with a
- *    real Anthropic API key (console.anthropic.com) -- stored in Secret
- *    Manager, never in this source file or any committed env file.
+ *  - `firebase functions:secrets:set GEMINI_API_KEY` run once, with a free
+ *    Gemini API key (aistudio.google.com -- no payment method needed) --
+ *    stored in Secret Manager, never in this source file or any committed
+ *    env file.
  *  - `firebase deploy --only functions`.
  *
  * Callable only by a signed-in user (`onCall` verifies the Firebase Auth ID
  * token automatically); the API key never reaches the client.
  */
 exports.generateSessionNarrative = onCall(
-    {secrets: [anthropicApiKey]},
+    {secrets: [geminiApiKey]},
     async (request) => {
       if (!request.auth) {
         throw new HttpsError("unauthenticated", "Sign in required.");
@@ -125,9 +126,9 @@ exports.generateSessionNarrative = onCall(
           request.data.screeningBand,
       );
 
-      const narrative = await callAnthropic({
-        messages: [{role: "user", content: prompt}],
-        maxTokens: 400,
+      const narrative = await callGemini({
+        contents: [{role: "user", parts: [{text: prompt}]}],
+        maxOutputTokens: 400,
       });
 
       return {narrative};
@@ -149,7 +150,7 @@ exports.generateSessionNarrative = onCall(
  * question an LLM is most tempted to over-answer.
  */
 exports.chatAboutSession = onCall(
-    {secrets: [anthropicApiKey]},
+    {secrets: [geminiApiKey]},
     async (request) => {
       if (!request.auth) {
         throw new HttpsError("unauthenticated", "Sign in required.");
@@ -184,51 +185,51 @@ exports.chatAboutSession = onCall(
           request.data.screeningBand,
       );
 
-      const reply = await callAnthropic({
-        system,
-        messages: messages.map((m) => ({role: m.role, content: m.content})),
-        maxTokens: 500,
+      const reply = await callGemini({
+        systemInstruction: system,
+        // Gemini's roles are "user"/"model", not "user"/"assistant".
+        contents: messages.map((m) => ({
+          role: m.role === "assistant" ? "model" : "user",
+          parts: [{text: m.content}],
+        })),
+        maxOutputTokens: 500,
       });
 
       return {reply};
     },
 );
 
-/** POSTs to the Anthropic Messages API and returns the concatenated text content. */
-async function callAnthropic({system, messages, maxTokens}) {
-  const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5";
+/** POSTs to the Gemini `generateContent` API and returns the concatenated text content. */
+async function callGemini({systemInstruction, contents, maxOutputTokens}) {
+  const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent` +
+    `?key=${geminiApiKey.value()}`;
 
   let response;
   try {
-    response = await fetch("https://api.anthropic.com/v1/messages", {
+    response = await fetch(url, {
       method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-api-key": anthropicApiKey.value(),
-        "anthropic-version": "2023-06-01",
-      },
+      headers: {"content-type": "application/json"},
       body: JSON.stringify({
-        model,
-        max_tokens: maxTokens,
-        ...(system ? {system} : {}),
-        messages,
+        contents,
+        ...(systemInstruction ? {systemInstruction: {parts: [{text: systemInstruction}]}} : {}),
+        generationConfig: {maxOutputTokens},
       }),
     });
   } catch (e) {
-    console.error("Anthropic API request failed:", e);
+    console.error("Gemini API request failed:", e);
     throw new HttpsError("unavailable", "Could not reach the narrative service.");
   }
 
   if (!response.ok) {
     const body = await response.text().catch(() => "");
-    console.error(`Anthropic API returned ${response.status}: ${body}`);
+    console.error(`Gemini API returned ${response.status}: ${body}`);
     throw new HttpsError("internal", "The narrative service returned an error.");
   }
 
   const json = await response.json();
-  const text = (json.content || [])
-      .filter((block) => block.type === "text")
-      .map((block) => block.text)
+  const text = ((json.candidates || [])[0]?.content?.parts || [])
+      .map((part) => part.text || "")
       .join("\n")
       .trim();
 
@@ -261,7 +262,7 @@ function sessionContextLines(metrics, recoverySummary, personalBaselineSummary, 
 }
 
 /**
- * Builds the prompt sent to Claude: the session's own numbers plus this
+ * Builds the prompt sent to Gemini: the session's own numbers plus this
  * app's own already-computed findings (recovery trend, personal-baseline
  * deviation, screening band), with explicit instructions not to add any
  * diagnosis or claim beyond what those numbers say.
