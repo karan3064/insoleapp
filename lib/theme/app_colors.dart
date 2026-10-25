@@ -43,14 +43,16 @@ class AppColors {
   );
 
   // Heatmap color ramp (from chart/detail Heat component's visualMap)
+  /// Classic "jet" colormap (dark blue -> blue -> cyan -> green -> yellow ->
+  /// orange -> red) -- the standard scientific/medical pressure-map
+  /// palette, matching clinical plantar-pressure heatmap conventions.
   static const List<Color> heatRamp = [
-    Color(0xFF8BC9EC),
-    Color(0xFFFFEDEA),
-    Color(0xFFFBDAD5),
-    Color(0xFFFEC4BC),
-    Color(0xFFF9B8AF),
-    Color(0xFFFDADA2),
-    Color(0xFFFF1F04),
+    Color(0xFF00008B),
+    Color(0xFF0000FF),
+    Color(0xFF00BFFF),
+    Color(0xFF00FF7F),
+    Color(0xFFFFFF00),
+    Color(0xFFFF8C00),
     Color(0xFFFF0000),
   ];
 }

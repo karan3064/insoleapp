@@ -135,16 +135,36 @@ class _FootPainter extends CustomPainter {
     const maxValue = 30.0; // scaled sensor units (post threshold+scale)
 
     if (heatMode) {
-      for (var i = 0; i < points.length; i++) {
+      // A continuous-looking clinical pressure map (like the reference jet
+      // colormap) needs the whole foot colored, not just hot spots over a
+      // blank background. Rather than blend overlapping colors via a
+      // custom BlendMode (BlendMode.plus washes out to white wherever
+      // several blobs overlap; BlendMode.lighten does a per-channel max
+      // that mixes hues into muddy off-ramp colors, e.g. cyan+red ->
+      // pink) -- both unpredictable without being able to see the actual
+      // render -- this fills the whole outline with the coldest ramp
+      // color first, then layers ordinary alpha-blended hot-spot blobs on
+      // top, painter's-algorithm style, hottest last. Normal source-over
+      // compositing of a known base + known overlays stays predictable.
+      final basePaint = Paint()..color = _rampColor(0);
+      canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), basePaint);
+
+      final order = List<int>.generate(points.length, (i) => i)
+        ..sort((a, b) => values[a].compareTo(values[b]));
+
+      for (final i in order) {
         final v = values[i];
         if (v <= 0) continue;
         final pos = _pointPos(size, points[i][0], points[i][1]);
         final t = (v / maxValue).clamp(0.0, 1.0);
-        final radius = size.width * (0.16 + 0.14 * t);
+        // Large, overlapping radii spread each hot spot into its
+        // surroundings so neighboring points read as one smooth gradient
+        // rather than separate dots.
+        final radius = size.width * (0.30 + 0.16 * t);
 
         final gradient = RadialGradient(
           colors: [
-            _rampColor(t).withValues(alpha: 0.9),
+            _rampColor(t),
             _rampColor(t).withValues(alpha: 0.0),
           ],
         );
