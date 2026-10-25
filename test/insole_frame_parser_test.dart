@@ -51,6 +51,20 @@ void main() {
     expect(frame.grid[0][11], expectedRight0);
     expect(frame.rightPoints[0], expectedRight0);
 
+    // Row12 (the first midfoot row, 3 points at cols 1/3/5) is medial<->
+    // lateral mirrored relative to the forefoot points above: confirmed
+    // by physical device testing that this row (and row15/row19 below
+    // it) still read opposite after the left/right-foot swap alone.
+    // left points 8/9/10 -> grid[12][1]/[12][3]/[12][5], sourced from
+    // list[24]/list[30]/list[36] (mirrored: positions 10/9/8 of
+    // _rightListIndex, not 8/9/10 straight).
+    expect(frame.grid[12][1], ((200 + 25 * 10) / 50).round()); // list[24]
+    expect(frame.grid[12][3], ((200 + 31 * 10) / 50).round()); // list[30]
+    expect(frame.grid[12][5], ((200 + 37 * 10) / 50).round()); // list[36]
+    expect(frame.leftPoints[8], ((200 + 25 * 10) / 50).round());
+    expect(frame.leftPoints[9], ((200 + 31 * 10) / 50).round());
+    expect(frame.leftPoints[10], ((200 + 37 * 10) / 50).round());
+
     // Untouched grid cells stay zero.
     expect(frame.grid[10][8], 0);
   });

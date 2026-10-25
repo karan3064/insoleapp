@@ -45,6 +45,18 @@ class InsoleFrameParser {
   static const List<int> _leftListIndex = [12, 0, 13, 7, 1, 14, 8, 2, 3, 9, 15, 4, 10, 16, 5, 17];
   static const List<int> _rightListIndex = [33, 21, 34, 28, 22, 35, 29, 23, 36, 30, 24, 37, 31, 25, 38, 26];
 
+  /// Confirmed by physical device testing: positions 8-15 (the row12/
+  /// row15/row19 midfoot+heel points, 3+3+2) were mirrored medial<->
+  /// lateral within each row, on both feet identically -- unlike the
+  /// left/right-foot swap above, this isn't "wrong array", it's specific
+  /// raw sensor indices landing one transverse position off from where
+  /// FootPointLayout says they should. Remaps position `i`'s raw-index
+  /// lookup to the raw index that was originally meant for the mirrored
+  /// position within its row (reversed within each of the three row-
+  /// groups: [8,9,10], [11,12,13], [14,15]; positions 0-7, the forefoot,
+  /// are untouched since those were already confirmed correct).
+  static const List<int> _mirrorWithinRow = [0, 1, 2, 3, 4, 5, 6, 7, 10, 9, 8, 13, 12, 11, 15, 14];
+
   static String bytesToHex(List<int> bytes) {
     final sb = StringBuffer();
     for (final b in bytes) {
@@ -101,13 +113,13 @@ class InsoleFrameParser {
       // suggest, so the two are swapped here (not renamed, to keep this
       // fix a minimal, obviously-reversible one-line-per-loop change).
       for (var i = 0; i < FootPointLayout.left.length; i++) {
-        final v = _at(list, _rightListIndex[i]);
+        final v = _at(list, _rightListIndex[_mirrorWithinRow[i]]);
         final rc = FootPointLayout.left[i];
         grid[rc[0]][rc[1]] = v;
         leftPoints.add(v);
       }
       for (var i = 0; i < FootPointLayout.right.length; i++) {
-        final v = _at(list, _leftListIndex[i]);
+        final v = _at(list, _leftListIndex[_mirrorWithinRow[i]]);
         final rc = FootPointLayout.right[i];
         grid[rc[0]][rc[1]] = v;
         rightPoints.add(v);
