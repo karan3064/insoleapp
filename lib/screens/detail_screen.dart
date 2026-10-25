@@ -18,6 +18,7 @@ import '../services/clinical_report_service.dart';
 import '../services/format_utils.dart';
 import '../services/gait_screening_model.dart';
 import '../services/health_calc.dart';
+import '../services/personal_baseline_model.dart';
 import '../services/recovery_analysis.dart';
 import '../services/session_file_store.dart';
 import '../state/auth_provider.dart';
@@ -235,6 +236,7 @@ class _DetailScreenState extends State<DetailScreen> {
 
     final speedMps = record.totalTime > 0 ? record.distanceKm * 1000 / (record.totalTime * 60) : null;
     final screening = GaitScreeningModel.predict(gait: gait, speedMps: speedMps);
+    final personalBaseline = PersonalBaselineModel.evaluate(history: insole.list, current: record);
     final strideLengthM = ClinicalGaitAnalysis.strideLengthMeters(
       distanceKm: record.distanceKm,
       leftStepCount: gait.left.stepCount,
@@ -458,6 +460,8 @@ class _DetailScreenState extends State<DetailScreen> {
               const SizedBox(height: 20),
               _GaitScreeningCard(result: screening),
             ],
+            const SizedBox(height: 20),
+            _PersonalBaselineCard(result: personalBaseline),
             if (record.path.isNotEmpty) ...[
               const SizedBox(height: 20),
               GpsPathMap(path: record.path),
@@ -531,6 +535,66 @@ class _GaitScreeningCard extends StatelessWidget {
             'a clinician\'s assessment -- treat it only as a prompt to discuss with one.',
             style: TextStyle(color: p.textSecondary, fontSize: 11),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Shows [PersonalBaselineModel]'s output: how this session compares to
+/// THIS patient's own history, not any external population. Deliberately
+/// distinct in tone from [_GaitScreeningCard] above it -- that one carries
+/// an external-validity disclaimer because it's scored against someone
+/// else's dataset; this one needs no such disclaimer because every number
+/// it's compared to came from this same patient's own past sessions.
+class _PersonalBaselineCard extends StatelessWidget {
+  final PersonalBaselineResult result;
+  const _PersonalBaselineCard({required this.result});
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    final (label, color) = switch (result.level) {
+      PersonalAnomalyLevel.normal => ('Within your normal range', AppColors.success),
+      PersonalAnomalyLevel.mild => ('Mild deviation', AppColors.warning),
+      PersonalAnomalyLevel.significant => ('Significant deviation', AppColors.warning),
+      PersonalAnomalyLevel.insufficientData => ('Still learning', p.textSecondary),
+    };
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: p.card(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text('Your personal baseline', style: TextStyle(fontWeight: FontWeight.w700)),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(color: color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(999)),
+                child: Text(label, style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 12)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(result.summary, style: TextStyle(color: p.textSecondary, fontSize: 12)),
+          if (result.deviations.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            ...result.deviations.map(
+              (d) => Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Text(
+                  '${d.displayLabel}: ${d.value.toStringAsFixed(1)} (your average: '
+                  '${d.baselineMean.toStringAsFixed(1)}, ${d.zScore.abs().toStringAsFixed(1)} SD '
+                  '${d.zScore >= 0 ? 'above' : 'below'})',
+                  style: TextStyle(color: p.textTertiary, fontSize: 11),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
