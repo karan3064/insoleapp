@@ -122,16 +122,21 @@ class _FootPainter extends CustomPainter {
     final w = size.width;
     final h = size.height;
     final path = Path();
-    // A simple stylized foot silhouette in a 0..1 x 0..1 box, toes at top.
-    path.moveTo(w * 0.50, h * 0.02);
-    path.cubicTo(w * 0.68, h * 0.02, w * 0.80, h * 0.10, w * 0.78, h * 0.20);
-    path.cubicTo(w * 0.76, h * 0.28, w * 0.66, h * 0.30, w * 0.66, h * 0.38);
-    path.cubicTo(w * 0.66, h * 0.46, w * 0.92, h * 0.55, w * 0.94, h * 0.72);
-    path.cubicTo(w * 0.97, h * 0.88, w * 0.80, h * 0.99, w * 0.50, h * 0.99);
-    path.cubicTo(w * 0.20, h * 0.99, w * 0.03, h * 0.88, w * 0.06, h * 0.72);
-    path.cubicTo(w * 0.08, h * 0.55, w * 0.34, h * 0.46, w * 0.34, h * 0.38);
-    path.cubicTo(w * 0.34, h * 0.30, w * 0.24, h * 0.28, w * 0.22, h * 0.20);
-    path.cubicTo(w * 0.20, h * 0.10, w * 0.32, h * 0.02, w * 0.50, h * 0.02);
+    // Every h-coordinate below is `1 - Y` of the original hand-authored
+    // silhouette (each term checked individually: e.g. original h*0.02 ->
+    // h*0.98, h*0.72 -> h*0.28, etc.) -- the original had its wide curve
+    // (forefoot/toes) at the BOTTOM and its narrow curve (heel) at the
+    // TOP, backwards from _pointPos's toes-at-top mapping (confirmed
+    // correct against real sensor data on-device). Toes at top now.
+    path.moveTo(w * 0.50, h * 0.98);
+    path.cubicTo(w * 0.68, h * 0.98, w * 0.80, h * 0.90, w * 0.78, h * 0.80);
+    path.cubicTo(w * 0.76, h * 0.72, w * 0.66, h * 0.70, w * 0.66, h * 0.62);
+    path.cubicTo(w * 0.66, h * 0.54, w * 0.92, h * 0.45, w * 0.94, h * 0.28);
+    path.cubicTo(w * 0.97, h * 0.12, w * 0.80, h * 0.01, w * 0.50, h * 0.01);
+    path.cubicTo(w * 0.20, h * 0.01, w * 0.03, h * 0.12, w * 0.06, h * 0.28);
+    path.cubicTo(w * 0.08, h * 0.45, w * 0.34, h * 0.54, w * 0.34, h * 0.62);
+    path.cubicTo(w * 0.34, h * 0.70, w * 0.24, h * 0.72, w * 0.22, h * 0.80);
+    path.cubicTo(w * 0.20, h * 0.90, w * 0.32, h * 0.98, w * 0.50, h * 0.98);
     path.close();
     return path;
   }
