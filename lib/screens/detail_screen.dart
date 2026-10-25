@@ -277,7 +277,9 @@ class _DetailScreenState extends State<DetailScreen> {
                   const SizedBox(height: 16),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
+                      if (_heatMode) const HeatLegend(),
                       FootPressureView(grid: _grid, isRight: false, heatMode: _heatMode),
                       FootPressureView(grid: _grid, isRight: true, heatMode: _heatMode),
                     ],

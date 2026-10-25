@@ -56,6 +56,43 @@ class FootPressureView extends StatelessWidget {
   }
 }
 
+/// The vertical color-scale bar shown alongside a heatmap (matches the
+/// legend on commercial plantar-pressure scanners): hottest color at top,
+/// coldest at bottom, with endpoint labels.
+class HeatLegend extends StatelessWidget {
+  final double height;
+  const HeatLegend({super.key, this.height = 260});
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    return SizedBox(
+      height: height,
+      child: Column(
+        children: [
+          Text('High', style: TextStyle(fontSize: 10, color: p.textSecondary)),
+          const SizedBox(height: 4),
+          Expanded(
+            child: Container(
+              width: 14,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(4),
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: AppColors.heatRamp.reversed.toList(),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text('Low', style: TextStyle(fontSize: 10, color: p.textSecondary)),
+        ],
+      ),
+    );
+  }
+}
+
 class _FootPainter extends CustomPainter {
   final List<List<int>> points;
   final int colOffset;
@@ -95,9 +132,12 @@ class _FootPainter extends CustomPainter {
 
   Offset _pointPos(Size size, int row, int col) {
     final x = (col - colOffset) / FootPointLayout.maxCol;
-    // Row 0 is the forefoot (toes) and row 19 is the heel, but toes should
-    // render at the top of the widget -- so invert the row axis.
-    final y = 1 - (row - FootPointLayout.minRow) / FootPointLayout.maxRow;
+    // Row 0 is the forefoot (toes), row 19 is the heel, and the widget's
+    // y axis already runs top-to-bottom in that same order (py below maps
+    // y=0 to the top, y=1 to the bottom) -- so this is a direct mapping,
+    // NOT inverted. (A previous `1 - ...` here was backwards: it put the
+    // heel at the top and toes at the bottom.)
+    final y = (row - FootPointLayout.minRow) / FootPointLayout.maxRow;
     // Keep points comfortably inside the silhouette.
     final margin = size.width * 0.12;
     final px = margin + x * (size.width - margin * 2);
@@ -162,11 +202,14 @@ class _FootPainter extends CustomPainter {
         // rather than separate dots.
         final radius = size.width * (0.30 + 0.16 * t);
 
+        // A flat-then-fading falloff (full color held out to 40% of the
+        // radius, then fading) reads as a soft blur, closer to a real
+        // interpolated pressure map, instead of a hard-centered dot that
+        // immediately starts fading from the very center.
+        final color = _rampColor(t);
         final gradient = RadialGradient(
-          colors: [
-            _rampColor(t),
-            _rampColor(t).withValues(alpha: 0.0),
-          ],
+          colors: [color, color, color.withValues(alpha: 0.0)],
+          stops: const [0.0, 0.4, 1.0],
         );
         final rect = Rect.fromCircle(center: pos, radius: radius);
         final paint = Paint()..shader = gradient.createShader(rect);

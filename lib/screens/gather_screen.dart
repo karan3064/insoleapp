@@ -78,7 +78,9 @@ class _GatherScreenState extends State<GatherScreen> {
                   const SizedBox(height: 16),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
+                      if (_heatMode) const HeatLegend(),
                       FootPressureView(grid: ble.grid, isRight: false, heatMode: _heatMode),
                       FootPressureView(grid: ble.grid, isRight: true, heatMode: _heatMode),
                     ],
