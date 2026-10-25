@@ -125,48 +125,140 @@ exports.generateSessionNarrative = onCall(
           request.data.screeningBand,
       );
 
-      const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5";
-
-      let response;
-      try {
-        response = await fetch("https://api.anthropic.com/v1/messages", {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            "x-api-key": anthropicApiKey.value(),
-            "anthropic-version": "2023-06-01",
-          },
-          body: JSON.stringify({
-            model,
-            max_tokens: 400,
-            messages: [{role: "user", content: prompt}],
-          }),
-        });
-      } catch (e) {
-        console.error("Anthropic API request failed:", e);
-        throw new HttpsError("unavailable", "Could not reach the narrative service.");
-      }
-
-      if (!response.ok) {
-        const body = await response.text().catch(() => "");
-        console.error(`Anthropic API returned ${response.status}: ${body}`);
-        throw new HttpsError("internal", "The narrative service returned an error.");
-      }
-
-      const json = await response.json();
-      const narrative = (json.content || [])
-          .filter((block) => block.type === "text")
-          .map((block) => block.text)
-          .join("\n")
-          .trim();
-
-      if (!narrative) {
-        throw new HttpsError("internal", "The narrative service returned no text.");
-      }
+      const narrative = await callAnthropic({
+        messages: [{role: "user", content: prompt}],
+        maxTokens: 400,
+      });
 
       return {narrative};
     },
 );
+
+/**
+ * Lets a patient/caregiver ask follow-up questions about a session they're
+ * already viewing ("why are my numbers elevated", "what should I do") --
+ * same session-metrics context as `generateSessionNarrative`, plus the
+ * running conversation so far (stateless on this end: the client resends
+ * the full transcript each turn, same as `generateSessionNarrative` is
+ * given the session's numbers fresh each call).
+ *
+ * The system prompt is the one place in this feature doing real safety
+ * work: explicit, repeated instructions not to diagnose or prescribe
+ * treatment, and to defer medical decisions to the patient's own
+ * clinician -- a patient asking "what should I do" here is exactly the
+ * question an LLM is most tempted to over-answer.
+ */
+exports.chatAboutSession = onCall(
+    {secrets: [anthropicApiKey]},
+    async (request) => {
+      if (!request.auth) {
+        throw new HttpsError("unauthenticated", "Sign in required.");
+      }
+
+      const metrics = request.data && request.data.metrics;
+      if (!metrics || typeof metrics !== "object") {
+        throw new HttpsError("invalid-argument", "metrics object is required.");
+      }
+
+      const messages = request.data.messages;
+      if (!Array.isArray(messages) || messages.length === 0) {
+        throw new HttpsError("invalid-argument", "messages array is required.");
+      }
+      // Caps both cost/abuse and prompt size -- a chat this long has long
+      // since stopped being about one session's numbers anyway.
+      if (messages.length > 20) {
+        throw new HttpsError("invalid-argument", "Too many messages in this conversation.");
+      }
+      for (const m of messages) {
+        if (!m || (m.role !== "user" && m.role !== "assistant") ||
+            typeof m.content !== "string" || m.content.length === 0 ||
+            m.content.length > 4000) {
+          throw new HttpsError("invalid-argument", "Malformed message in conversation.");
+        }
+      }
+
+      const system = buildChatSystemPrompt(
+          metrics,
+          request.data.recoverySummary,
+          request.data.personalBaselineSummary,
+          request.data.screeningBand,
+      );
+
+      const reply = await callAnthropic({
+        system,
+        messages: messages.map((m) => ({role: m.role, content: m.content})),
+        maxTokens: 500,
+      });
+
+      return {reply};
+    },
+);
+
+/** POSTs to the Anthropic Messages API and returns the concatenated text content. */
+async function callAnthropic({system, messages, maxTokens}) {
+  const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5";
+
+  let response;
+  try {
+    response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": anthropicApiKey.value(),
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: maxTokens,
+        ...(system ? {system} : {}),
+        messages,
+      }),
+    });
+  } catch (e) {
+    console.error("Anthropic API request failed:", e);
+    throw new HttpsError("unavailable", "Could not reach the narrative service.");
+  }
+
+  if (!response.ok) {
+    const body = await response.text().catch(() => "");
+    console.error(`Anthropic API returned ${response.status}: ${body}`);
+    throw new HttpsError("internal", "The narrative service returned an error.");
+  }
+
+  const json = await response.json();
+  const text = (json.content || [])
+      .filter((block) => block.type === "text")
+      .map((block) => block.text)
+      .join("\n")
+      .trim();
+
+  if (!text) {
+    throw new HttpsError("internal", "The narrative service returned no text.");
+  }
+
+  return text;
+}
+
+/** Shared context block: this session's numbers plus this app's own already-computed findings. */
+function sessionContextLines(metrics, recoverySummary, personalBaselineSummary, screeningBand) {
+  const lines = [
+    "Session metrics:",
+    JSON.stringify(metrics, null, 2),
+  ];
+
+  if (recoverySummary) {
+    lines.push("", "Recovery trend (already computed by the app):", recoverySummary);
+  }
+  if (personalBaselineSummary) {
+    lines.push("", "Comparison to this patient's own baseline (already computed by the app):",
+        personalBaselineSummary);
+  }
+  if (screeningBand) {
+    lines.push("", `Gait screening signal (already computed by the app): ${screeningBand}`);
+  }
+
+  return lines;
+}
 
 /**
  * Builds the prompt sent to Claude: the session's own numbers plus this
@@ -183,20 +275,47 @@ function buildNarrativePrompt(metrics, recoverySummary, personalBaselineSummary,
     "recommend any treatment. If a value is missing, simply don't mention " +
     "it. Write 2-4 short sentences, warm but clinical in tone.",
     "",
-    "Session metrics:",
-    JSON.stringify(metrics, null, 2),
+    ...sessionContextLines(metrics, recoverySummary, personalBaselineSummary, screeningBand),
   ];
 
-  if (recoverySummary) {
-    lines.push("", "Recovery trend (already computed by the app):", recoverySummary);
-  }
-  if (personalBaselineSummary) {
-    lines.push("", "Comparison to this patient's own baseline (already computed by the app):",
-        personalBaselineSummary);
-  }
-  if (screeningBand) {
-    lines.push("", `Gait screening signal (already computed by the app): ${screeningBand}`);
-  }
+  return lines.join("\n");
+}
+
+/**
+ * System prompt for `chatAboutSession` -- same session-context block as
+ * the narrative prompt, with guardrails aimed specifically at the
+ * follow-up questions this is for ("why is this elevated", "what should I
+ * do"): explain what the numbers and the app's own findings mean in plain
+ * language, but never diagnose, never prescribe or rule out a specific
+ * treatment/exercise, and always point a "what should I do" question back
+ * to the patient's own clinician/physiotherapist rather than answering it
+ * directly.
+ */
+function buildChatSystemPrompt(metrics, recoverySummary, personalBaselineSummary, screeningBand) {
+  const lines = [
+    "You are a gait-analysis assistant inside a smart-insole app called " +
+    "NurvoSync, answering a patient or caregiver's follow-up questions " +
+    "about one specific test session. You have only the data below -- do " +
+    "not invent numbers or claim data you don't have.",
+    "",
+    "Rules, which apply to every reply in this conversation:",
+    "- You may explain what a metric means and why the app's own findings " +
+    "below say what they say (e.g. why a value counts as 'elevated' or " +
+    "'asymmetric' relative to typical ranges or this patient's own history).",
+    "- Never provide a diagnosis, never state or imply a medical condition, " +
+    "and never prescribe, recommend, or rule out a specific treatment, " +
+    "exercise, or medication change.",
+    "- When asked what to do (e.g. 'what should I do', 'how do I fix this'), " +
+    "say this is a question for their treating clinician or physiotherapist, " +
+    "and you can help them prepare for that conversation (e.g. what to " +
+    "mention), but you will not tell them what action to take.",
+    "- If a question goes beyond what this session's data can answer, say so " +
+    "plainly rather than guessing.",
+    "- Keep replies short (2-5 sentences) and in plain language, not clinical " +
+    "jargon.",
+    "",
+    ...sessionContextLines(metrics, recoverySummary, personalBaselineSummary, screeningBand),
+  ];
 
   return lines.join("\n");
 }

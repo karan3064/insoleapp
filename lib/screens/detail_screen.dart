@@ -16,8 +16,8 @@ import '../models/user_profile.dart';
 import '../services/clinical_gait_analysis.dart';
 import '../services/clinical_report_service.dart';
 import '../services/format_utils.dart';
-import '../services/gait_screening_model.dart';
 import '../services/ai_narrative_service.dart';
+import '../services/gait_screening_model.dart';
 import '../services/health_calc.dart';
 import '../services/personal_baseline_model.dart';
 import '../services/recovery_analysis.dart';
@@ -29,6 +29,7 @@ import '../theme/app_palette.dart';
 import '../widgets/foot_line_chart.dart';
 import '../widgets/foot_pressure_view.dart';
 import '../widgets/gps_path_map.dart';
+import 'ai_chat_screen.dart';
 
 /// Mirrors `chart/detail/detail.vue`: replays a saved test session and
 /// shows the derived gait analytics (footprint, arch, landing method,
@@ -513,6 +514,17 @@ class _DetailScreenState extends State<DetailScreen> {
               loading: _narrativeLoading,
               error: _narrativeError,
               onGenerate: _generateNarrative,
+              onChat: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => AiChatScreen(
+                    summary: summary,
+                    recoverySummary: recovery.summary,
+                    personalBaselineSummary: personalBaseline.summary,
+                    screening: screening,
+                  ),
+                ),
+              ),
             ),
             if (record.path.isNotEmpty) ...[
               const SizedBox(height: 20),
@@ -661,12 +673,14 @@ class _AiNarrativeCard extends StatelessWidget {
   final bool loading;
   final String? error;
   final VoidCallback onGenerate;
+  final VoidCallback onChat;
 
   const _AiNarrativeCard({
     required this.narrative,
     required this.loading,
     required this.error,
     required this.onGenerate,
+    required this.onChat,
   });
 
   @override
@@ -682,6 +696,11 @@ class _AiNarrativeCard extends StatelessWidget {
             children: [
               const Expanded(
                 child: Text('AI session summary', style: TextStyle(fontWeight: FontWeight.w700)),
+              ),
+              IconButton(
+                tooltip: 'Ask about this session',
+                onPressed: onChat,
+                icon: const Icon(Icons.chat_bubble_outline, size: 20),
               ),
               TextButton.icon(
                 onPressed: loading ? null : onGenerate,
