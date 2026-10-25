@@ -182,7 +182,13 @@ class _FootPainter extends CustomPainter {
     canvas.save();
     canvas.clipPath(outline);
 
-    const maxValue = 30.0; // scaled sensor units (post threshold+scale)
+    // Scaled sensor units (post threshold+scale: (raw-200)/50). Raised from
+    // 30 after on-device testing showed even a light touch read as full red
+    // -- 30 meant any raw reading above ~1700 already maxed out the color
+    // scale, which is low for this hardware's actual sensitivity. This is a
+    // first-pass retune, not a calibrated value -- adjust again based on
+    // how a light vs. firm press actually looks after this change.
+    const maxValue = 60.0;
 
     if (heatMode) {
       // A continuous-looking clinical pressure map needs the whole foot
