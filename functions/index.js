@@ -126,9 +126,13 @@ exports.generateSessionNarrative = onCall(
           request.data.screeningBand,
       );
 
+      // Generous relative to the 2-4 sentences the prompt asks for --
+      // gemini-3.8-flash spends part of this same token budget on internal
+      // reasoning before writing the visible answer, so a tight limit here
+      // cuts the actual reply off mid-sentence rather than the reasoning.
       const narrative = await callGemini({
         contents: [{role: "user", parts: [{text: prompt}]}],
-        maxOutputTokens: 400,
+        maxOutputTokens: 1024,
       });
 
       return {narrative};
@@ -192,7 +196,7 @@ exports.chatAboutSession = onCall(
           role: m.role === "assistant" ? "model" : "user",
           parts: [{text: m.content}],
         })),
-        maxOutputTokens: 500,
+        maxOutputTokens: 1200,
       });
 
       return {reply};
