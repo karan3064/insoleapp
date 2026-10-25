@@ -8,6 +8,7 @@ import 'package:permission_handler/permission_handler.dart';
 
 import '../models/foot_line_data.dart';
 import '../models/foot_point_layout.dart';
+import '../models/fog_event.dart';
 import '../models/insole_device.dart';
 import '../models/insole_record.dart';
 import '../models/pressure_frame.dart';
@@ -15,6 +16,7 @@ import '../models/record_summary.dart';
 import '../models/safe_zone.dart';
 import '../models/track_point.dart';
 import '../services/capture_service_channel.dart';
+import '../services/freeze_index_detector.dart';
 import '../services/geofence_service.dart';
 import '../services/geofence_tracker.dart';
 import '../services/insole_frame_parser.dart';
@@ -81,6 +83,17 @@ class BleProvider extends ChangeNotifier {
   SafeZone? _safeZone;
   final _geofenceService = GeofenceService();
   final _geofenceTracker = GeofenceTracker();
+
+  /// Real-time Freezing-of-Gait detection, running on the live pressure
+  /// stream the same way GPS/geofence checking runs on the live location
+  /// stream -- see `FreezeIndexDetector` for the signal-processing method.
+  final _fogDetector = FreezeIndexDetector();
+  List<FogEvent> fogEvents = [];
+  bool get isFreezing => _fogDetector.isFreezing;
+
+  BleProvider() {
+    _fogDetector.onEvent = _onFogEvent;
+  }
 
   void configureSafety({required String? uid, required SafeZone? zone}) {
     _patientUid = uid;
@@ -264,7 +277,30 @@ class BleProvider extends ChangeNotifier {
       if (sink != null) {
         _fileStore.writeFrame(sink, PressureFrame(time: elapsedMs, item: frame.grid));
       }
+
+      // Combined vertical-loading signal (sum of every sensor cell, both
+      // feet) -- the same proxy a shank accelerometer's vertical axis
+      // measures, which is what the freeze-index method is built on.
+      final totalPressure = frame.grid.fold<int>(
+        0,
+        (sum, row) => sum + row.fold<int>(0, (s, v) => s + v),
+      );
+      _fogDetector.push(elapsedMs, totalPressure);
     }
+  }
+
+  /// Fires once per completed Freezing-of-Gait episode. Records it to
+  /// Firestore (best-effort, same posture as `_checkGeofence`) so family
+  /// contacts can be alerted the same way they are for a geofence breach.
+  void _onFogEvent(FogEvent event) {
+    fogEvents.add(event);
+    notifyListeners();
+
+    final uid = _patientUid;
+    if (uid == null) return;
+    unawaited(_geofenceService
+        .recordFogEvent(uid, event)
+        .catchError((Object e) => debugPrint('fog recordFogEvent failed: $e')));
   }
 
   static void _trimLiveWindow(FootLineData data) {
@@ -327,6 +363,8 @@ class BleProvider extends ChangeNotifier {
     path.clear();
     totalDistanceKm = 0;
     _parser.reset();
+    _fogDetector.reset();
+    fogEvents = [];
   }
 
   Future<void> _startLocationTracking() async {
@@ -434,6 +472,7 @@ class BleProvider extends ChangeNotifier {
       line: line,
       rightLine: rightFull,
       elapsedSeconds: elapsedSeconds,
+      fogEvents: List.of(fogEvents),
     );
 
     final record = InsoleRecord(

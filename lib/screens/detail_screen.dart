@@ -317,6 +317,19 @@ class _DetailScreenState extends State<DetailScreen> {
                 Expanded(child: _StatBox(label: 'Full', value: '${summary.wholePct}%')),
               ],
             ),
+            if (summary.fogEventCount > 0) ...[
+              const SizedBox(height: 20),
+              _SectionTitle('Freezing-of-gait signal'),
+              Row(
+                children: [
+                  Expanded(child: _StatBox(label: 'Episodes', value: '${summary.fogEventCount}')),
+                  Expanded(
+                      child: _StatBox(
+                          label: 'Total freeze time',
+                          value: '${(summary.totalFreezeMs / 1000).toStringAsFixed(1)} s')),
+                ],
+              ),
+            ],
             const SizedBox(height: 20),
             _SectionTitle('Grounding method'),
             _LRRow(left: summary.landingLeft, right: summary.landingRight),

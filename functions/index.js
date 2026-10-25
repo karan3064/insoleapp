@@ -33,17 +33,7 @@ exports.onGeofenceAlertCreated = onDocumentCreated(
 
       const uid = event.params.uid;
       const alert = snapshot.data();
-      const db = admin.firestore();
-
-      const [profileSnap, contactsSnap] = await Promise.all([
-        db.collection("users").doc(uid).get(),
-        db.collection("users").doc(uid).collection("familyContacts").get(),
-      ]);
-
-      if (contactsSnap.empty) return;
-
-      const profile = profileSnap.data() || {};
-      const patientName = profile.displayName || "The person you're monitoring";
+      const patientName = await patientDisplayName(uid);
       const distanceMeters = Math.round(alert.distanceMeters || 0);
 
       const subject = `${patientName} has left their safe zone`;
@@ -54,29 +44,77 @@ exports.onGeofenceAlertCreated = onDocumentCreated(
         "This is an automated alert from NurvoSync. It is not a diagnosis " +
         "and does not replace direct supervision.";
 
-      const tokens = contactsSnap.docs
-          .map((d) => d.data().fcmToken)
-          .filter((t) => typeof t === "string" && t.length > 0);
-
-      const sendPush = tokens.length ?
-        admin.messaging().sendEachForMulticast({
-          tokens,
-          notification: {title: subject, body},
-        }).catch((e) => console.error("geofence push failed:", e)) :
-        Promise.resolve();
-
-      const sendEmails = Promise.all(
-          contactsSnap.docs.map((d) => {
-            const email = d.data().email;
-            if (!email) return Promise.resolve();
-            return sendEmail(email, subject, body)
-                .catch((e) => console.error(`geofence email to ${email} failed:`, e));
-          }),
-      );
-
-      await Promise.all([sendPush, sendEmails]);
+      await notifyFamilyContacts(uid, subject, body);
     },
 );
+
+/**
+ * Fires when the app records a completed Freezing-of-Gait episode (see
+ * `GeofenceService.recordFogEvent`, written by `FreezeIndexDetector` on
+ * the client). Same delivery path as a geofence breach: push + email to
+ * every joined family contact.
+ *
+ * This is a real-time signal-processing detection (frequency-domain
+ * freeze-index analysis of the insole pressure signal), not a medical
+ * diagnosis -- the alert text below says so explicitly.
+ */
+exports.onFogAlertCreated = onDocumentCreated(
+    "users/{uid}/fogAlerts/{alertId}",
+    async (event) => {
+      const snapshot = event.data;
+      if (!snapshot) return;
+
+      const uid = event.params.uid;
+      const alert = snapshot.data();
+      const patientName = await patientDisplayName(uid);
+      const durationSec = ((alert.durationMs || 0) / 1000).toFixed(1);
+
+      const subject = `${patientName} may have had a freezing-of-gait episode`;
+      const body =
+        `A ${durationSec}s episode with gait-freezing signal characteristics ` +
+        `was detected during ${patientName}'s insole session.\n\n` +
+        "This is an automated signal-processing alert from NurvoSync, not a " +
+        "diagnosis -- please check on them.";
+
+      await notifyFamilyContacts(uid, subject, body);
+    },
+);
+
+/** Looks up the patient's display name, falling back to a generic label. */
+async function patientDisplayName(uid) {
+  const profileSnap = await admin.firestore().collection("users").doc(uid).get();
+  const profile = profileSnap.data() || {};
+  return profile.displayName || "The person you're monitoring";
+}
+
+/** Pushes + emails every joined family contact for this patient. */
+async function notifyFamilyContacts(uid, subject, body) {
+  const contactsSnap = await admin.firestore()
+      .collection("users").doc(uid).collection("familyContacts").get();
+  if (contactsSnap.empty) return;
+
+  const tokens = contactsSnap.docs
+      .map((d) => d.data().fcmToken)
+      .filter((t) => typeof t === "string" && t.length > 0);
+
+  const sendPush = tokens.length ?
+    admin.messaging().sendEachForMulticast({
+      tokens,
+      notification: {title: subject, body},
+    }).catch((e) => console.error("push failed:", e)) :
+    Promise.resolve();
+
+  const sendEmails = Promise.all(
+      contactsSnap.docs.map((d) => {
+        const email = d.data().email;
+        if (!email) return Promise.resolve();
+        return sendEmail(email, subject, body)
+            .catch((e) => console.error(`email to ${email} failed:`, e));
+      }),
+  );
+
+  await Promise.all([sendPush, sendEmails]);
+}
 
 let cachedTransport;
 

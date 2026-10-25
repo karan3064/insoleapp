@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/family_contact.dart';
+import '../models/fog_event.dart';
 import '../models/safe_zone.dart';
 
 /// Cloud storage for the geofencing/safety feature: the patient's safe
@@ -86,6 +87,20 @@ class GeofenceService {
       'latitude': latitude,
       'longitude': longitude,
       'distanceMeters': distanceMeters,
+      'timestamp': FieldValue.serverTimestamp(),
+    });
+  }
+
+  /// Records a completed Freezing-of-Gait episode detected on the
+  /// patient's device (see `FreezeIndexDetector`). Same posture as
+  /// [recordBreach]: a Cloud Function (`onFogAlertCreated`) picks this up
+  /// and notifies family contacts by push + email, so delivery doesn't
+  /// depend on the patient's device staying online.
+  Future<void> recordFogEvent(String uid, FogEvent event) async {
+    await _db.collection('users').doc(uid).collection('fogAlerts').add({
+      'startMs': event.startMs,
+      'durationMs': event.durationMs,
+      'peakFreezeIndex': event.peakFreezeIndex,
       'timestamp': FieldValue.serverTimestamp(),
     });
   }

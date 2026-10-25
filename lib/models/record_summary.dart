@@ -1,6 +1,7 @@
 import '../services/clinical_gait_analysis.dart';
 import '../services/gait_analysis.dart';
 import 'foot_line_data.dart';
+import 'fog_event.dart';
 import 'pressure_frame.dart';
 
 /// Everything a saved session's dashboard/detail/trends views need,
@@ -29,6 +30,13 @@ class RecordSummary {
   final int balancePercent;
   final ClinicalGaitReport clinical;
 
+  /// Freezing-of-Gait episodes detected during this session (see
+  /// `FreezeIndexDetector`) -- raw signal-processing events, not a
+  /// diagnosis.
+  final List<FogEvent> fogEvents;
+  int get fogEventCount => fogEvents.length;
+  int get totalFreezeMs => fogEvents.fold(0, (sum, e) => sum + e.durationMs);
+
   RecordSummary({
     required this.stepCount,
     required this.cadenceSpm,
@@ -51,6 +59,7 @@ class RecordSummary {
     required this.rRear,
     required this.balancePercent,
     required this.clinical,
+    this.fogEvents = const [],
   });
 
   static const _frontKeys = ['data', 'data2', 'data3', 'data4', 'data5', 'data6', 'data7', 'data8'];
@@ -67,6 +76,7 @@ class RecordSummary {
     required FootLineData line,
     required FootLineData rightLine,
     required int elapsedSeconds,
+    List<FogEvent> fogEvents = const [],
   }) {
     final stepCount = GaitAnalysis.processFrames(details);
     final cadence = GaitAnalysis.calculateCadence(stepCount, elapsedSeconds);
@@ -100,6 +110,7 @@ class RecordSummary {
       rRear: GaitAnalysis.calculateAverage(rightLine, _rearKeys).round(),
       balancePercent: GaitAnalysis.calculateBalance(lFoot, rFoot),
       clinical: clinical,
+      fogEvents: fogEvents,
     );
   }
 
@@ -128,6 +139,7 @@ class RecordSummary {
     rRear: 0,
     balancePercent: 0,
     clinical: ClinicalGaitReport.empty,
+    fogEvents: const [],
   );
 
   Map<String, dynamic> toJson() => {
@@ -152,6 +164,7 @@ class RecordSummary {
         'rRear': rRear,
         'balancePercent': balancePercent,
         'clinical': clinical.toJson(),
+        'fogEvents': fogEvents.map((e) => e.toJson()).toList(),
       };
 
   factory RecordSummary.fromJson(Map<String, dynamic> json) => RecordSummary(
@@ -178,5 +191,8 @@ class RecordSummary {
         clinical: json['clinical'] == null
             ? ClinicalGaitReport.empty
             : ClinicalGaitReport.fromJson(Map<String, dynamic>.from(json['clinical'] as Map)),
+        fogEvents: ((json['fogEvents'] as List?) ?? const [])
+            .map((e) => FogEvent.fromJson(Map<String, dynamic>.from(e as Map)))
+            .toList(),
       );
 }

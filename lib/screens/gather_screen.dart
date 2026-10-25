@@ -107,6 +107,29 @@ class _GatherScreenState extends State<GatherScreen> {
                 ],
               ),
             ),
+            if (ble.isFreezing) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: AppColors.warning.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppColors.warning),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.warning_amber_rounded, color: AppColors.warning),
+                    const SizedBox(width: 10),
+                    const Expanded(
+                      child: Text(
+                        'Possible freezing-of-gait signal detected',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: 20),
             ElevatedButton(
               onPressed: ble.isCapturing && !_saving ? _saveSession : null,
