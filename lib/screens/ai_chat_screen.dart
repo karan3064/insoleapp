@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/record_summary.dart';
 import '../services/ai_narrative_service.dart';
-import '../services/gait_screening_model.dart';
+import '../services/ensemble_gait_screening.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_palette.dart';
 
@@ -15,14 +15,14 @@ class AiChatScreen extends StatefulWidget {
   final RecordSummary summary;
   final String? recoverySummary;
   final String? personalBaselineSummary;
-  final GaitScreeningResult? screening;
+  final EnsembleGaitScreeningResult? ensemble;
 
   const AiChatScreen({
     super.key,
     required this.summary,
     this.recoverySummary,
     this.personalBaselineSummary,
-    this.screening,
+    this.ensemble,
   });
 
   @override
@@ -61,7 +61,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
         history: _messages,
         recoverySummary: widget.recoverySummary,
         personalBaselineSummary: widget.personalBaselineSummary,
-        screening: widget.screening,
+        ensemble: widget.ensemble,
       );
       if (!mounted) return;
       setState(() {

@@ -17,6 +17,7 @@ import '../services/clinical_gait_analysis.dart';
 import '../services/clinical_report_service.dart';
 import '../services/format_utils.dart';
 import '../services/ai_narrative_service.dart';
+import '../services/ensemble_gait_screening.dart';
 import '../services/gait_screening_model.dart';
 import '../services/health_calc.dart';
 import '../services/personal_baseline_model.dart';
@@ -67,6 +68,7 @@ class _DetailScreenState extends State<DetailScreen> {
   RecoveryComparison? _lastRecovery;
   PersonalBaselineResult? _lastPersonalBaseline;
   GaitScreeningResult? _lastScreening;
+  EnsembleGaitScreeningResult? _lastEnsemble;
 
   String? _narrative;
   bool _narrativeLoading = false;
@@ -84,7 +86,7 @@ class _DetailScreenState extends State<DetailScreen> {
         summary: summary,
         recoverySummary: _lastRecovery?.summary,
         personalBaselineSummary: _lastPersonalBaseline?.summary,
-        screening: _lastScreening,
+        ensemble: _lastEnsemble,
       );
       if (!mounted) return;
       setState(() {
@@ -277,12 +279,14 @@ class _DetailScreenState extends State<DetailScreen> {
     );
 
     final speedMps = record.totalTime > 0 ? record.distanceKm * 1000 / (record.totalTime * 60) : null;
-    final screening = GaitScreeningModel.predict(gait: gait, speedMps: speedMps);
+    final ensemble = EnsembleGaitScreening.evaluate(gait: gait, speedMps: speedMps);
+    final screening = ensemble.logisticRegression;
     final personalBaseline = PersonalBaselineModel.evaluate(history: insole.list, current: record);
     _lastSummary = summary;
     _lastRecovery = recovery;
     _lastPersonalBaseline = personalBaseline;
     _lastScreening = screening;
+    _lastEnsemble = ensemble;
     final strideLengthM = ClinicalGaitAnalysis.strideLengthMeters(
       distanceKm: record.distanceKm,
       leftStepCount: gait.left.stepCount,
@@ -504,7 +508,7 @@ class _DetailScreenState extends State<DetailScreen> {
             ),
             if (screening != null) ...[
               const SizedBox(height: 20),
-              _GaitScreeningCard(result: screening),
+              _GaitScreeningCard(ensemble: ensemble),
             ],
             const SizedBox(height: 20),
             _PersonalBaselineCard(result: personalBaseline),
@@ -521,7 +525,7 @@ class _DetailScreenState extends State<DetailScreen> {
                     summary: summary,
                     recoverySummary: recovery.summary,
                     personalBaselineSummary: personalBaseline.summary,
-                    screening: screening,
+                    ensemble: ensemble,
                   ),
                 ),
               ),
@@ -556,22 +560,31 @@ class _DetailScreenState extends State<DetailScreen> {
   }
 }
 
-/// Shows [GaitScreeningModel]'s output as a qualitative band only, never a
-/// raw percentage -- see that class's doc comment for why a precise number
-/// would overstate how confident this model actually is. Deliberately
-/// paired with an always-visible disclaimer, not a one-time tooltip.
+/// Shows both of [EnsembleGaitScreening]'s models' output -- never a raw
+/// percentage from either (see each model's doc comment for why a precise
+/// number would overstate how confident it actually is) -- plus whether
+/// they agree. Deliberately paired with an always-visible disclaimer, not
+/// a one-time tooltip.
 class _GaitScreeningCard extends StatelessWidget {
-  final GaitScreeningResult result;
-  const _GaitScreeningCard({required this.result});
+  final EnsembleGaitScreeningResult ensemble;
+  const _GaitScreeningCard({required this.ensemble});
+
+  static (String, Color) _bandDisplay(GaitScreeningBand band) => switch (band) {
+        GaitScreeningBand.low => ('Low signal', AppColors.success),
+        GaitScreeningBand.inconclusive => ('Inconclusive', AppColors.warning),
+        GaitScreeningBand.elevated => ('Elevated signal', AppColors.warning),
+      };
 
   @override
   Widget build(BuildContext context) {
     final p = context.palette;
-    final (label, color) = switch (result.band) {
-      GaitScreeningBand.low => ('Low signal', AppColors.success),
-      GaitScreeningBand.inconclusive => ('Inconclusive', AppColors.warning),
-      GaitScreeningBand.elevated => ('Elevated signal', AppColors.warning),
-    };
+    final lr = ensemble.logisticRegression;
+    final rf = ensemble.randomForest;
+    if (lr == null || rf == null) return const SizedBox.shrink();
+
+    final (lrLabel, lrColor) = _bandDisplay(lr.band);
+    final (rfLabel, rfColor) = _bandDisplay(rf.band);
+    final agree = ensemble.agreement == EnsembleAgreement.agree;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -586,21 +599,54 @@ class _GaitScreeningCard extends StatelessWidget {
               ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(color: color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(999)),
-                child: Text(label, style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 12)),
+                decoration: BoxDecoration(
+                  color: (agree ? AppColors.primary : AppColors.warning).withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  agree ? '2 models agree' : 'Models disagree',
+                  style: TextStyle(
+                    color: agree ? AppColors.primary : AppColors.warning,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                  ),
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
+          _ModelRow(name: 'Logistic regression', label: lrLabel, color: lrColor),
+          const SizedBox(height: 6),
+          _ModelRow(name: 'Random forest (25 trees)', label: rfLabel, color: rfColor),
+          const SizedBox(height: 10),
           Text(
-            'An experimental signal comparing this session\'s gait pattern to a research '
-            'dataset of Parkinson\'s patients and healthy adults. This is NOT a diagnosis, '
-            'has not been validated on this app\'s own hardware, and should never replace '
-            'a clinician\'s assessment -- treat it only as a prompt to discuss with one.',
+            'Two independently-trained screening models comparing this session\'s gait '
+            'pattern to a research dataset of Parkinson\'s patients and healthy adults. '
+            'This is NOT a diagnosis, has not been validated on this app\'s own hardware, '
+            'and should never replace a clinician\'s assessment -- treat it only as a '
+            'prompt to discuss with one.',
             style: TextStyle(color: p.textSecondary, fontSize: 11),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _ModelRow extends StatelessWidget {
+  final String name;
+  final String label;
+  final Color color;
+  const _ModelRow({required this.name, required this.label, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    return Row(
+      children: [
+        Expanded(child: Text(name, style: TextStyle(color: p.textSecondary, fontSize: 13))),
+        Text(label, style: TextStyle(color: color, fontWeight: FontWeight.w600, fontSize: 13)),
+      ],
     );
   }
 }

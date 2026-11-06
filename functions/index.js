@@ -90,8 +90,10 @@ exports.onFogAlertCreated = onDocumentCreated(
  * frames, only the small set of numbers `RecordSummary`/`ClinicalGaitReport`
  * already compute on the client (see `AiNarrativeService` on the client for
  * exactly what's sent). This is a narration layer on top of the app's own
- * trained/rule-based analysis (`GaitScreeningModel`, `PersonalBaselineModel`,
- * `RecoveryAnalysis`), not a replacement for it -- the LLM is never asked to
+ * trained/rule-based analysis (`EnsembleGaitScreening` -- a logistic
+ * regression and a random forest, both trained on the same real PhysioNet
+ * data -- plus `PersonalBaselineModel` and `RecoveryAnalysis`), not a
+ * replacement for it -- the LLM is never asked to
  * invent a clinical judgment of its own from the raw numbers, only to
  * narrate the judgments those already made.
  *
@@ -124,6 +126,7 @@ exports.generateSessionNarrative = onCall(
           request.data.recoverySummary,
           request.data.personalBaselineSummary,
           request.data.screeningBand,
+          request.data.screeningModels,
       );
 
       // Generous relative to the 2-4 sentences the prompt asks for --
@@ -187,6 +190,7 @@ exports.chatAboutSession = onCall(
           request.data.recoverySummary,
           request.data.personalBaselineSummary,
           request.data.screeningBand,
+          request.data.screeningModels,
       );
 
       const reply = await callGemini({
@@ -245,7 +249,7 @@ async function callGemini({systemInstruction, contents, maxOutputTokens}) {
 }
 
 /** Shared context block: this session's numbers plus this app's own already-computed findings. */
-function sessionContextLines(metrics, recoverySummary, personalBaselineSummary, screeningBand) {
+function sessionContextLines(metrics, recoverySummary, personalBaselineSummary, screeningBand, screeningModels) {
   const lines = [
     "Session metrics:",
     JSON.stringify(metrics, null, 2),
@@ -258,7 +262,21 @@ function sessionContextLines(metrics, recoverySummary, personalBaselineSummary, 
     lines.push("", "Comparison to this patient's own baseline (already computed by the app):",
         personalBaselineSummary);
   }
-  if (screeningBand) {
+  if (screeningModels && screeningModels.logisticRegression && screeningModels.randomForest) {
+    // Two independently-trained models (different architectures, same training
+    // data) scored this session -- surface both plus agreement, not a single
+    // number, so the AI can accurately describe confidence without overstating it.
+    lines.push(
+        "",
+        "Gait screening signal (already computed by the app, two independently-trained models):",
+        `- Logistic regression model: ${screeningModels.logisticRegression}`,
+        `- Random forest model: ${screeningModels.randomForest}`,
+        screeningModels.agree
+          ? "These two models agree on this read."
+          : "These two models disagree -- treat this signal as inconclusive, not as a tie-break " +
+            "toward either model's answer.",
+    );
+  } else if (screeningBand) {
     lines.push("", `Gait screening signal (already computed by the app): ${screeningBand}`);
   }
 
@@ -271,7 +289,7 @@ function sessionContextLines(metrics, recoverySummary, personalBaselineSummary, 
  * deviation, screening band), with explicit instructions not to add any
  * diagnosis or claim beyond what those numbers say.
  */
-function buildNarrativePrompt(metrics, recoverySummary, personalBaselineSummary, screeningBand) {
+function buildNarrativePrompt(metrics, recoverySummary, personalBaselineSummary, screeningBand, screeningModels) {
   const lines = [
     "You are writing a short plain-language summary of one gait-analysis " +
     "session for a patient or their caregiver, using a smart-insole app " +
@@ -280,7 +298,7 @@ function buildNarrativePrompt(metrics, recoverySummary, personalBaselineSummary,
     "recommend any treatment. If a value is missing, simply don't mention " +
     "it. Write 2-4 short sentences, warm but clinical in tone.",
     "",
-    ...sessionContextLines(metrics, recoverySummary, personalBaselineSummary, screeningBand),
+    ...sessionContextLines(metrics, recoverySummary, personalBaselineSummary, screeningBand, screeningModels),
   ];
 
   return lines.join("\n");
@@ -296,7 +314,7 @@ function buildNarrativePrompt(metrics, recoverySummary, personalBaselineSummary,
  * to the patient's own clinician/physiotherapist rather than answering it
  * directly.
  */
-function buildChatSystemPrompt(metrics, recoverySummary, personalBaselineSummary, screeningBand) {
+function buildChatSystemPrompt(metrics, recoverySummary, personalBaselineSummary, screeningBand, screeningModels) {
   const lines = [
     "You are a gait-analysis assistant inside a smart-insole app called " +
     "NurvoSync, answering a patient or caregiver's follow-up questions " +
@@ -319,7 +337,7 @@ function buildChatSystemPrompt(metrics, recoverySummary, personalBaselineSummary
     "- Keep replies short (2-5 sentences) and in plain language, not clinical " +
     "jargon.",
     "",
-    ...sessionContextLines(metrics, recoverySummary, personalBaselineSummary, screeningBand),
+    ...sessionContextLines(metrics, recoverySummary, personalBaselineSummary, screeningBand, screeningModels),
   ];
 
   return lines.join("\n");

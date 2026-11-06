@@ -1,6 +1,7 @@
 import 'package:cloud_functions/cloud_functions.dart';
 
 import '../models/record_summary.dart';
+import 'ensemble_gait_screening.dart';
 import 'gait_screening_model.dart';
 
 enum ChatRole { user, assistant }
@@ -41,13 +42,13 @@ class AiNarrativeService {
     required RecordSummary summary,
     String? recoverySummary,
     String? personalBaselineSummary,
-    GaitScreeningResult? screening,
+    EnsembleGaitScreeningResult? ensemble,
   }) async {
     final result = await _call('generateSessionNarrative', {
       'metrics': _buildMetrics(summary),
       if (recoverySummary != null) 'recoverySummary': recoverySummary,
       if (personalBaselineSummary != null) 'personalBaselineSummary': personalBaselineSummary,
-      if (_screeningBandLabel(screening) != null) 'screeningBand': _screeningBandLabel(screening),
+      ..._ensembleFields(ensemble),
     });
     final narrative = result['narrative'] as String?;
     if (narrative == null || narrative.isEmpty) {
@@ -62,7 +63,7 @@ class AiNarrativeService {
     required List<ChatMessage> history,
     String? recoverySummary,
     String? personalBaselineSummary,
-    GaitScreeningResult? screening,
+    EnsembleGaitScreeningResult? ensemble,
   }) async {
     final trimmed = history.length > maxChatMessagesSent
         ? history.sublist(history.length - maxChatMessagesSent)
@@ -72,7 +73,7 @@ class AiNarrativeService {
       'metrics': _buildMetrics(summary),
       if (recoverySummary != null) 'recoverySummary': recoverySummary,
       if (personalBaselineSummary != null) 'personalBaselineSummary': personalBaselineSummary,
-      if (_screeningBandLabel(screening) != null) 'screeningBand': _screeningBandLabel(screening),
+      ..._ensembleFields(ensemble),
       'messages': trimmed
           .map((m) => {'role': m.role == ChatRole.user ? 'user' : 'assistant', 'content': m.content})
           .toList(),
@@ -120,12 +121,31 @@ class AiNarrativeService {
     }..removeWhere((_, v) => v == null);
   }
 
-  static String? _screeningBandLabel(GaitScreeningResult? screening) => switch (screening?.band) {
+  static String _bandLabel(GaitScreeningBand band) => switch (band) {
         GaitScreeningBand.low => 'low signal',
         GaitScreeningBand.inconclusive => 'inconclusive',
         GaitScreeningBand.elevated => 'elevated signal',
-        null => null,
       };
+
+  /// Surfaces both of this app's independently-trained screening models
+  /// (see `EnsembleGaitScreening`) to the AI, not just one band label --
+  /// including whether they agree, since that's a real signal the model
+  /// can reasonably explain ("two different models landed on the same
+  /// read" vs. "the two models disagreed, so treat this as inconclusive").
+  static Map<String, dynamic> _ensembleFields(EnsembleGaitScreeningResult? ensemble) {
+    if (ensemble == null) return {};
+    final lr = ensemble.logisticRegression;
+    final rf = ensemble.randomForest;
+    if (lr == null || rf == null) return {};
+    return {
+      'screeningBand': _bandLabel(lr.band),
+      'screeningModels': {
+        'logisticRegression': _bandLabel(lr.band),
+        'randomForest': _bandLabel(rf.band),
+        'agree': ensemble.agreement == EnsembleAgreement.agree,
+      },
+    };
+  }
 }
 
 class AiNarrativeException implements Exception {
