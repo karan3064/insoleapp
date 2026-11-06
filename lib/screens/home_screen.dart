@@ -4,7 +4,11 @@ import 'package:provider/provider.dart';
 import '../models/foot_line_data.dart';
 import '../models/foot_point_layout.dart';
 import '../models/insole_record.dart';
+import '../models/mood_entry.dart';
 import '../services/health_calc.dart';
+import '../services/home_ai_service.dart';
+import '../services/mood_gait_correlation.dart';
+import '../services/mood_service.dart';
 import '../services/session_file_store.dart';
 import '../state/auth_provider.dart';
 import '../state/ble_provider.dart';
@@ -77,7 +81,11 @@ class HomeScreen extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
+            _AiGreetingCard(records: insole.list, displayName: profile.displayName),
+            const SizedBox(height: 12),
+            if (auth.uid != null) _MoodCheckInCard(uid: auth.uid!, records: insole.list),
+            const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.all(20),
               decoration: p.card(),
@@ -349,6 +357,206 @@ class _EmptyState extends StatelessWidget {
       alignment: Alignment.center,
       decoration: p.card(),
       child: Text('No test data yet', style: TextStyle(color: p.textSecondary)),
+    );
+  }
+}
+
+/// The very first AI touchpoint a user sees -- a personalized one-line
+/// greeting (Gemini via `HomeAiService.generateHomeInsight`) built from
+/// whatever recent trend context is on hand, never raw sensor data. Falls
+/// back to a generic time-of-day greeting on any failure, so a flaky
+/// network call never blocks the home screen from rendering.
+class _AiGreetingCard extends StatefulWidget {
+  final List<InsoleRecord> records;
+  final String? displayName;
+  const _AiGreetingCard({required this.records, required this.displayName});
+
+  @override
+  State<_AiGreetingCard> createState() => _AiGreetingCardState();
+}
+
+class _AiGreetingCardState extends State<_AiGreetingCard> {
+  String? _greeting;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  static String _timeOfDay() {
+    final hour = DateTime.now().hour;
+    if (hour < 12) return 'morning';
+    if (hour < 17) return 'afternoon';
+    return 'evening';
+  }
+
+  Future<void> _load() async {
+    final recent = widget.records.take(7).toList();
+    final greetingContext = {
+      'timeOfDay': _timeOfDay(),
+      if (widget.displayName != null) 'displayName': widget.displayName,
+      'recentSessionCount': recent.length,
+      if (recent.isNotEmpty) 'latestCadenceSpm': recent.first.summary.cadenceSpm,
+      if (recent.isNotEmpty) 'latestStepCount': recent.first.summary.stepCount,
+    };
+    final greeting = await HomeAiService.generateHomeInsight(greetingContext);
+    if (!mounted) return;
+    setState(() {
+      _greeting = greeting;
+      _loading = false;
+    });
+  }
+
+  String _fallbackGreeting() {
+    final name = widget.displayName;
+    return 'Good ${_timeOfDay()}${name != null ? ', $name' : ''} -- ready for today\'s walk?';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    if (_loading) return const SizedBox.shrink();
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppColors.primary.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.auto_awesome, color: AppColors.primary, size: 18),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(_greeting ?? _fallbackGreeting(), style: TextStyle(color: p.text, fontSize: 13)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// "How are you feeling today?" -- a quick daily mood check-in with a
+/// short AI (Gemini) empathetic reply, plus (once there's enough history)
+/// `MoodGaitCorrelation`'s insight into whether mood and measured gait
+/// quality move together for this patient. One check-in per calendar day.
+class _MoodCheckInCard extends StatefulWidget {
+  final String uid;
+  final List<InsoleRecord> records;
+  const _MoodCheckInCard({required this.uid, required this.records});
+
+  @override
+  State<_MoodCheckInCard> createState() => _MoodCheckInCardState();
+}
+
+class _MoodCheckInCardState extends State<_MoodCheckInCard> {
+  final _service = MoodService();
+  MoodEntry? _todayEntry;
+  MoodGaitCorrelationResult? _correlation;
+  bool _loading = true;
+  bool _submitting = false;
+  String? _aiReply;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final results = await Future.wait([
+      _service.todayEntry(widget.uid),
+      _service.recentEntries(widget.uid),
+    ]);
+    if (!mounted) return;
+    final entry = results[0] as MoodEntry?;
+    final history = results[1] as List<MoodEntry>;
+    setState(() {
+      _todayEntry = entry;
+      _correlation = MoodGaitCorrelation.evaluate(moodEntries: history, records: widget.records);
+      _loading = false;
+    });
+  }
+
+  Future<void> _submit(int score) async {
+    setState(() => _submitting = true);
+    await _service.checkIn(widget.uid, score: score);
+    final reply = await HomeAiService.respondToMoodCheckIn(score: score);
+    if (!mounted) return;
+    setState(() {
+      _todayEntry = MoodEntry(id: MoodEntry.dateKey(DateTime.now()), date: DateTime.now(), score: score);
+      _aiReply = reply;
+      _submitting = false;
+    });
+  }
+
+  static const _moodEmoji = ['😞', '🙁', '😐', '🙂', '😄'];
+  static const _moodLabels = ['Very low', 'Low', 'Okay', 'Good', 'Great'];
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    if (_loading) return const SizedBox.shrink();
+
+    final entry = _todayEntry;
+    final correlation = _correlation;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: p.card(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text('How are you feeling today?', style: TextStyle(fontWeight: FontWeight.w700)),
+          const SizedBox(height: 10),
+          if (entry == null) ...[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: List.generate(5, (i) {
+                final score = i + 1;
+                return InkWell(
+                  borderRadius: BorderRadius.circular(999),
+                  onTap: _submitting ? null : () => _submit(score),
+                  child: Container(
+                    width: 40,
+                    height: 40,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(color: p.surface2, shape: BoxShape.circle),
+                    child: Text(_moodEmoji[i], style: const TextStyle(fontSize: 20)),
+                  ),
+                );
+              }),
+            ),
+            if (_submitting) ...[
+              const SizedBox(height: 10),
+              const Center(
+                child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+              ),
+            ],
+          ] else ...[
+            Text('Checked in today: ${_moodLabels[entry.score - 1]}',
+                style: TextStyle(color: p.textSecondary)),
+            if (_aiReply != null) ...[
+              const SizedBox(height: 8),
+              Text(_aiReply!, style: TextStyle(color: p.text, fontSize: 13)),
+            ],
+          ],
+          if (correlation != null && correlation.correlations.isNotEmpty) ...[
+            const Divider(height: 24),
+            Row(
+              children: [
+                Icon(Icons.insights, size: 16, color: p.textSecondary),
+                const SizedBox(width: 6),
+                Text('Mood & gait pattern', style: TextStyle(color: p.textSecondary, fontSize: 12)),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(correlation.summary, style: TextStyle(color: p.textSecondary, fontSize: 12)),
+          ],
+        ],
+      ),
     );
   }
 }

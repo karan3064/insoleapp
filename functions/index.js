@@ -207,6 +207,87 @@ exports.chatAboutSession = onCall(
     },
 );
 
+/**
+ * A short, personalized line for the home screen's greeting -- the first
+ * thing a user sees, generated from whatever recent trend context the
+ * client has on hand (session count, recovery/baseline summaries, time of
+ * day), never raw sensor data. Falls back gracefully on the client if this
+ * fails; see `HomeAiService`.
+ */
+exports.generateHomeInsight = onCall(
+    {secrets: [geminiApiKey]},
+    async (request) => {
+      if (!request.auth) {
+        throw new HttpsError("unauthenticated", "Sign in required.");
+      }
+
+      const context = request.data && request.data.context;
+      if (!context || typeof context !== "object") {
+        throw new HttpsError("invalid-argument", "context object is required.");
+      }
+
+      const lines = [
+        "Write ONE short, warm sentence (under 20 words) for the top of a gait-" +
+        "monitoring app's home screen, personalized from the context below. If " +
+        "there isn't enough context to say anything specific, write a brief " +
+        "generic welcome instead -- never invent a number or trend that isn't " +
+        "given. No diagnosis, no medical advice, no exclamation-point enthusiasm.",
+        "",
+        "Context:",
+        JSON.stringify(context, null, 2),
+      ];
+
+      const greeting = await callGemini({
+        contents: [{role: "user", parts: [{text: lines.join("\n")}]}],
+        maxOutputTokens: 200,
+      });
+
+      return {greeting};
+    },
+);
+
+/**
+ * A brief empathetic response to a daily mood check-in ("How are you
+ * feeling today?") -- never a diagnosis, never medical advice, and never
+ * alarmist about a low score. This is emotional acknowledgment, not
+ * clinical triage; a genuinely concerning pattern is something
+ * `MoodGaitCorrelation` and the patient's own clinician are better placed
+ * to catch than a one-line AI reply.
+ */
+exports.respondToMoodCheckIn = onCall(
+    {secrets: [geminiApiKey]},
+    async (request) => {
+      if (!request.auth) {
+        throw new HttpsError("unauthenticated", "Sign in required.");
+      }
+
+      const score = request.data && request.data.score;
+      if (typeof score !== "number" || score < 1 || score > 5) {
+        throw new HttpsError("invalid-argument", "score (1-5) is required.");
+      }
+      const note = typeof request.data.note === "string" ? request.data.note.slice(0, 500) : null;
+
+      const lines = [
+        "A patient using a gait-monitoring app just did a daily mood check-in, " +
+        "scoring their day " + score + "/5 (1 = very low, 5 = very good)." +
+        (note ? ` They also wrote: "${note}"` : ""),
+        "",
+        "Write ONE short, warm, empathetic sentence in response. Do not diagnose, " +
+        "do not give medical or treatment advice, do not be alarmist even at a low " +
+        "score -- just acknowledge how they're feeling. If the score is low (1-2), " +
+        "you may gently suggest it's worth mentioning to someone they trust, but " +
+        "do not escalate or imply an emergency.",
+      ];
+
+      const reply = await callGemini({
+        contents: [{role: "user", parts: [{text: lines.join("\n")}]}],
+        maxOutputTokens: 150,
+      });
+
+      return {reply};
+    },
+);
+
 /** POSTs to the Gemini `generateContent` API and returns the concatenated text content. */
 async function callGemini({systemInstruction, contents, maxOutputTokens}) {
   const model = process.env.GEMINI_MODEL || "gemini-3.8-flash";

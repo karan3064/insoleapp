@@ -118,31 +118,9 @@ class _GatherScreenState extends State<GatherScreen> {
                 ],
               ),
             ),
-            if (ble.isFreezing) ...[
+            if (ble.isCapturing) ...[
               const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: AppColors.warning.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppColors.warning),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.warning_amber_rounded, color: AppColors.warning),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        ble.isCueingActive
-                            ? 'Possible freeze detected -- rhythmic pulse cueing active to help you keep walking'
-                            : 'Possible freezing-of-gait signal detected',
-                        style: const TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                    ),
-                    if (ble.isCueingActive) Icon(Icons.vibration, color: AppColors.warning),
-                  ],
-                ),
-              ),
+              _LiveAiMonitorBar(isFreezing: ble.isFreezing, isCueingActive: ble.isCueingActive),
             ],
             const SizedBox(height: 20),
             ElevatedButton(
@@ -207,6 +185,54 @@ class _ModeToggle extends StatelessWidget {
         children: [
           segment('Points', !heatMode, () => onChanged(false)),
           segment('Heat', heatMode, () => onChanged(true)),
+        ],
+      ),
+    );
+  }
+}
+
+/// Always visible while a test is actively capturing -- answers "what AI
+/// is actually running while I'm wearing the insoles", not just "what AI
+/// ran after I save the session". `FreezeIndexDetector` (frequency-domain
+/// signal analysis) and the rhythmic-cueing response genuinely run on
+/// every live pressure frame already; this just surfaces that honestly,
+/// instead of only showing anything when a freeze actually fires.
+class _LiveAiMonitorBar extends StatelessWidget {
+  final bool isFreezing;
+  final bool isCueingActive;
+  const _LiveAiMonitorBar({required this.isFreezing, required this.isCueingActive});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = isFreezing ? AppColors.warning : AppColors.primary;
+    final String text;
+    if (isFreezing) {
+      text = isCueingActive
+          ? 'Possible freeze detected -- rhythmic pulse cueing active to help you keep walking'
+          : 'Possible freezing-of-gait signal detected';
+    } else {
+      text = 'AI monitoring active -- analyzing freeze-of-gait signal in real time';
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withValues(alpha: isFreezing ? 1.0 : 0.4)),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            isFreezing ? Icons.warning_amber_rounded : Icons.auto_awesome,
+            color: color,
+            size: 20,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(text, style: TextStyle(fontWeight: FontWeight.w700, color: color)),
+          ),
+          if (isCueingActive) Icon(Icons.vibration, color: color),
         ],
       ),
     );
