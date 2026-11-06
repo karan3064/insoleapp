@@ -20,6 +20,7 @@ import '../services/ai_narrative_service.dart';
 import '../services/ensemble_gait_screening.dart';
 import '../services/gait_screening_model.dart';
 import '../services/health_calc.dart';
+import '../services/isolation_forest_baseline.dart';
 import '../services/personal_baseline_model.dart';
 import '../services/recovery_analysis.dart';
 import '../services/session_file_store.dart';
@@ -282,6 +283,7 @@ class _DetailScreenState extends State<DetailScreen> {
     final ensemble = EnsembleGaitScreening.evaluate(gait: gait, speedMps: speedMps);
     final screening = ensemble.logisticRegression;
     final personalBaseline = PersonalBaselineModel.evaluate(history: insole.list, current: record);
+    final isolationResult = IsolationForestBaseline.evaluate(history: insole.list, current: record);
     _lastSummary = summary;
     _lastRecovery = recovery;
     _lastPersonalBaseline = personalBaseline;
@@ -511,7 +513,7 @@ class _DetailScreenState extends State<DetailScreen> {
               _GaitScreeningCard(ensemble: ensemble),
             ],
             const SizedBox(height: 20),
-            _PersonalBaselineCard(result: personalBaseline),
+            _PersonalBaselineCard(result: personalBaseline, isolationResult: isolationResult),
             const SizedBox(height: 20),
             _AiNarrativeCard(
               narrative: _narrative,
@@ -659,7 +661,8 @@ class _ModelRow extends StatelessWidget {
 /// it's compared to came from this same patient's own past sessions.
 class _PersonalBaselineCard extends StatelessWidget {
   final PersonalBaselineResult result;
-  const _PersonalBaselineCard({required this.result});
+  final IsolationForestResult? isolationResult;
+  const _PersonalBaselineCard({required this.result, this.isolationResult});
 
   @override
   Widget build(BuildContext context) {
@@ -704,6 +707,20 @@ class _PersonalBaselineCard extends StatelessWidget {
                 ),
               ),
             ),
+          ],
+          if (isolationResult != null &&
+              isolationResult!.level != IsolationAnomalyLevel.insufficientData) ...[
+            const Divider(height: 20),
+            Row(
+              children: [
+                Icon(Icons.hub_outlined, size: 14, color: p.textSecondary),
+                const SizedBox(width: 6),
+                Text('Multi-metric pattern (Isolation Forest)',
+                    style: TextStyle(color: p.textSecondary, fontSize: 11, fontWeight: FontWeight.w600)),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(isolationResult!.summary, style: TextStyle(color: p.textTertiary, fontSize: 11)),
           ],
         ],
       ),
