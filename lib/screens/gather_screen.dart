@@ -1,8 +1,12 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../models/record_summary.dart';
+import '../services/ai_narrative_service.dart';
+import '../services/ensemble_gait_screening.dart';
 import '../services/format_utils.dart';
 import '../state/auth_provider.dart';
 import '../state/ble_provider.dart';
@@ -47,6 +51,21 @@ class _GatherScreenState extends State<GatherScreen> {
     if (!mounted) return;
     setState(() => _saving = false);
 
+    // Capstone moment: surface the AI's plain-language read of the walk
+    // just finished, front and center, before anything else -- not
+    // buried a tap away on the detail screen.
+    final ensemble = EnsembleGaitScreening.evaluate(
+      gait: record.summary.clinical,
+      speedMps: null,
+    );
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _AiSummarySheet(summary: record.summary, ensemble: ensemble),
+    );
+
+    if (!mounted) return;
     // Pushed (not replaced) so the back button returns here, still
     // connected and still capturing.
     Navigator.of(context).push(
@@ -120,7 +139,12 @@ class _GatherScreenState extends State<GatherScreen> {
             ),
             if (ble.isCapturing) ...[
               const SizedBox(height: 12),
-              _LiveAiMonitorBar(isFreezing: ble.isFreezing, isCueingActive: ble.isCueingActive),
+              _LiveAiMonitorBar(
+                isFreezing: ble.isFreezing,
+                isCueingActive: ble.isCueingActive,
+                freezeHistory: ble.freezeIndexHistory,
+                liveEnsemble: ble.liveEnsemble,
+              ),
             ],
             const SizedBox(height: 20),
             ElevatedButton(
@@ -194,16 +218,27 @@ class _ModeToggle extends StatelessWidget {
 /// Always visible while a test is actively capturing -- answers "what AI
 /// is actually running while I'm wearing the insoles", not just "what AI
 /// ran after I save the session". `FreezeIndexDetector` (frequency-domain
-/// signal analysis) and the rhythmic-cueing response genuinely run on
-/// every live pressure frame already; this just surfaces that honestly,
+/// signal analysis), the live ensemble-screening re-check, and the
+/// rhythmic-cueing response all genuinely run on the live pressure stream
+/// already; this just surfaces that honestly, with the actual freeze-index
+/// signal plotted live and the two screening models' live agreement state,
 /// instead of only showing anything when a freeze actually fires.
 class _LiveAiMonitorBar extends StatelessWidget {
   final bool isFreezing;
   final bool isCueingActive;
-  const _LiveAiMonitorBar({required this.isFreezing, required this.isCueingActive});
+  final List<double> freezeHistory;
+  final EnsembleGaitScreeningResult? liveEnsemble;
+
+  const _LiveAiMonitorBar({
+    required this.isFreezing,
+    required this.isCueingActive,
+    required this.freezeHistory,
+    required this.liveEnsemble,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final p = context.palette;
     final color = isFreezing ? AppColors.warning : AppColors.primary;
     final String text;
     if (isFreezing) {
@@ -221,19 +256,261 @@ class _LiveAiMonitorBar extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: color.withValues(alpha: isFreezing ? 1.0 : 0.4)),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            isFreezing ? Icons.warning_amber_rounded : Icons.auto_awesome,
-            color: color,
-            size: 20,
+          Row(
+            children: [
+              Icon(
+                isFreezing ? Icons.warning_amber_rounded : Icons.auto_awesome,
+                color: color,
+                size: 20,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(text, style: TextStyle(fontWeight: FontWeight.w700, color: color)),
+              ),
+              if (isCueingActive) Icon(Icons.vibration, color: color),
+            ],
           ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(text, style: TextStyle(fontWeight: FontWeight.w700, color: color)),
-          ),
-          if (isCueingActive) Icon(Icons.vibration, color: color),
+          if (freezeHistory.length >= 2) ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Text(
+                  'Freeze-index signal',
+                  style: TextStyle(color: p.textSecondary, fontSize: 11, fontWeight: FontWeight.w600),
+                ),
+                const Spacer(),
+                Text(
+                  freezeHistory.last.toStringAsFixed(2),
+                  style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w700),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            SizedBox(
+              height: 36,
+              width: double.infinity,
+              child: CustomPaint(
+                painter: _FreezeSparklinePainter(values: freezeHistory, lineColor: color),
+              ),
+            ),
+          ],
+          const SizedBox(height: 10),
+          _LiveEnsembleBadge(ensemble: liveEnsemble),
         ],
+      ),
+    );
+  }
+}
+
+/// Live analogue of `DetailScreen`'s `_GaitScreeningCard` badge -- same
+/// "2 models agree" / "Models disagree" language, but re-computed every
+/// few seconds from the session-so-far's data (see
+/// `BleProvider._updateLiveEnsemble`) instead of once at save time, so the
+/// jury sees the two AI judges actually checking each other live, not just
+/// a claim made after the fact.
+class _LiveEnsembleBadge extends StatelessWidget {
+  final EnsembleGaitScreeningResult? ensemble;
+  const _LiveEnsembleBadge({required this.ensemble});
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    final e = ensemble;
+
+    final String label;
+    final Color color;
+    final IconData icon;
+    if (e == null || e.agreement == EnsembleAgreement.insufficientData) {
+      label = 'Two screening models warming up...';
+      color = p.textTertiary;
+      icon = Icons.hourglass_top_rounded;
+    } else if (e.agreement == EnsembleAgreement.agree) {
+      label = 'Logistic regression + random forest agree';
+      color = AppColors.success;
+      icon = Icons.check_circle;
+    } else {
+      label = 'Models disagree -- flagged inconclusive, not guessed';
+      color = AppColors.warning;
+      icon = Icons.rule;
+    }
+
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: color),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            label,
+            style: TextStyle(color: color, fontSize: 11.5, fontWeight: FontWeight.w700),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Minimal hand-rolled line sparkline -- no charting package needed for a
+/// handful of points redrawn every ~400ms. Draws the most recent
+/// [_FreezeSparklinePainter.values] left-to-right, auto-scaled to the
+/// window's own min/max rather than a fixed axis, since the freeze index's
+/// useful range shifts a lot between standing still and mid-freeze.
+class _FreezeSparklinePainter extends CustomPainter {
+  final List<double> values;
+  final Color lineColor;
+  const _FreezeSparklinePainter({required this.values, required this.lineColor});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (values.length < 2) return;
+
+    final maxV = values.reduce(math.max);
+    final minV = values.reduce(math.min);
+    final span = (maxV - minV).abs() < 1e-6 ? 1.0 : (maxV - minV);
+
+    final path = Path();
+    for (var i = 0; i < values.length; i++) {
+      final x = values.length == 1 ? 0.0 : size.width * i / (values.length - 1);
+      final normalized = (values[i] - minV) / span;
+      final y = size.height - (normalized * size.height);
+      if (i == 0) {
+        path.moveTo(x, y);
+      } else {
+        path.lineTo(x, y);
+      }
+    }
+
+    final linePaint = Paint()
+      ..color = lineColor
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    canvas.drawPath(path, linePaint);
+
+    final dotPaint = Paint()..color = lineColor;
+    final lastX = size.width;
+    final lastNormalized = (values.last - minV) / span;
+    final lastY = size.height - (lastNormalized * size.height);
+    canvas.drawCircle(Offset(lastX, lastY), 3, dotPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _FreezeSparklinePainter oldDelegate) =>
+      !identical(oldDelegate.values, values) || oldDelegate.lineColor != lineColor;
+}
+
+/// The capstone moment right after a demo walk: Gemini's plain-language
+/// read of the session the user/judge just watched happen, surfaced
+/// immediately and prominently -- not a tap away on the detail screen.
+/// Generates on open; failure is shown inline (never silently swallowed),
+/// since this runs live in front of an audience.
+class _AiSummarySheet extends StatefulWidget {
+  final RecordSummary summary;
+  final EnsembleGaitScreeningResult ensemble;
+  const _AiSummarySheet({required this.summary, required this.ensemble});
+
+  @override
+  State<_AiSummarySheet> createState() => _AiSummarySheetState();
+}
+
+class _AiSummarySheetState extends State<_AiSummarySheet> {
+  String? _narrative;
+  String? _error;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _generate();
+  }
+
+  Future<void> _generate() async {
+    try {
+      final narrative = await AiNarrativeService.generateSessionNarrative(
+        summary: widget.summary,
+        ensemble: widget.ensemble,
+      );
+      if (!mounted) return;
+      setState(() {
+        _narrative = narrative;
+        _loading = false;
+      });
+    } on AiNarrativeException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.message;
+        _loading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.palette;
+    final agree = widget.ensemble.agreement == EnsembleAgreement.agree;
+
+    return SafeArea(
+      child: Container(
+        margin: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: p.surface,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: p.border),
+          boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 24, offset: Offset(0, 8))],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.auto_awesome, color: AppColors.primary, size: 22),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text('AI read of this walk', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+                ),
+                if (widget.ensemble.agreement != EnsembleAgreement.insufficientData)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: (agree ? AppColors.primary : AppColors.warning).withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      agree ? '2 models agree' : 'Models disagree',
+                      style: TextStyle(
+                        color: agree ? AppColors.primary : AppColors.warning,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            if (_loading)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (_error != null)
+              Text(_error!, style: const TextStyle(color: AppColors.error))
+            else
+              Text(
+                _narrative ?? '',
+                style: TextStyle(color: p.text, fontSize: 14.5, height: 1.5),
+              ),
+            const SizedBox(height: 18),
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('View full details'),
+            ),
+          ],
+        ),
       ),
     );
   }

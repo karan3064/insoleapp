@@ -17,6 +17,8 @@ import '../models/record_summary.dart';
 import '../models/safe_zone.dart';
 import '../models/track_point.dart';
 import '../services/capture_service_channel.dart';
+import '../services/clinical_gait_analysis.dart';
+import '../services/ensemble_gait_screening.dart';
 import '../services/freeze_index_detector.dart';
 import '../services/geofence_service.dart';
 import '../services/geofence_tracker.dart';
@@ -105,9 +107,41 @@ class BleProvider extends ChangeNotifier {
   int _cueIntervalMs = 550;
   bool isCueingActive = false;
 
+  /// Live freeze-index samples (see `FreezeIndexDetector.onSample`), most
+  /// recent last, bounded to [_freezeHistorySize] -- enough for a live
+  /// sparkline covering the last ~16 seconds without growing unbounded
+  /// over a multi-hour capture.
+  final List<double> freezeIndexHistory = [];
+  static const _freezeHistorySize = 40;
+
+  /// Live, periodically-refreshed ensemble screening result (see
+  /// `EnsembleGaitScreening`), computed from the session-so-far's data
+  /// every [_liveEnsembleIntervalSec] -- lets the UI show "the two models
+  /// agree" live during capture, not only after a session is saved.
+  /// `null` until enough data has accumulated for a first read.
+  EnsembleGaitScreeningResult? liveEnsemble;
+  bool _computingLiveEnsemble = false;
+  Timer? _liveEnsembleTimer;
+  static const _liveEnsembleIntervalSec = 6;
+
+  /// Minimum capture time before the first live-ensemble attempt -- a
+  /// handful of seconds isn't enough for even one full gait cycle on
+  /// either foot, so attempting earlier would just burn CPU reading back
+  /// the frame file for a result that's always `insufficientData`.
+  static const _liveEnsembleMinElapsedSec = 8;
+
   BleProvider() {
     _fogDetector.onEvent = _onFogEvent;
     _fogDetector.onFreezingChanged = _onFreezingChanged;
+    _fogDetector.onSample = _onFreezeSample;
+  }
+
+  void _onFreezeSample(double freezeIndex, bool moving) {
+    freezeIndexHistory.add(freezeIndex);
+    if (freezeIndexHistory.length > _freezeHistorySize) {
+      freezeIndexHistory.removeRange(0, freezeIndexHistory.length - _freezeHistorySize);
+    }
+    notifyListeners();
   }
 
   void configureSafety({required String? uid, required SafeZone? zone}) {
@@ -374,6 +408,12 @@ class BleProvider extends ChangeNotifier {
       notifyListeners();
     });
 
+    _liveEnsembleTimer?.cancel();
+    _liveEnsembleTimer = Timer.periodic(
+      const Duration(seconds: _liveEnsembleIntervalSec),
+      (_) => unawaited(_updateLiveEnsemble()),
+    );
+
     unawaited(_startLocationTracking());
 
     // Best-effort: lets Android keep this process (and the BLE/GPS
@@ -396,6 +436,7 @@ class BleProvider extends ChangeNotifier {
   Future<void> _stopCapture() async {
     isCapturing = false;
     _testTimer?.cancel();
+    _liveEnsembleTimer?.cancel();
     _positionSub?.cancel();
     await _frameSink?.flush();
     await _frameSink?.close();
@@ -413,6 +454,42 @@ class BleProvider extends ChangeNotifier {
     _parser.reset();
     _fogDetector.reset();
     fogEvents = [];
+    freezeIndexHistory.clear();
+    liveEnsemble = null;
+  }
+
+  /// Reads back the session-so-far's frame file and re-runs ensemble gait
+  /// screening on it, so the live demo can show "the two models agree"
+  /// updating in real time instead of only after a session is saved.
+  /// Best-effort: a read/compute failure here should never interrupt
+  /// capture, same posture as geofence/FCM writes elsewhere in this class.
+  Future<void> _updateLiveEnsemble() async {
+    if (_computingLiveEnsemble) return;
+    if (elapsedSeconds < _liveEnsembleMinElapsedSec) return;
+    final framePath = _framesFilePath;
+    if (framePath == null) return;
+
+    _computingLiveEnsemble = true;
+    try {
+      await _frameSink?.flush();
+      final details = await _fileStore.readFramesAtPath(framePath);
+      if (details.length < 10) return;
+
+      final line = FootLineData.fromFrames(details, FootPointLayout.left);
+      final rightFull = FootLineData.fromFrames(details, FootPointLayout.right);
+      final gait = ClinicalGaitAnalysis.analyze(line: line, rightLine: rightFull, details: details);
+
+      final speedMps = (totalDistanceKm > 0 && elapsedSeconds > 0)
+          ? (totalDistanceKm * 1000) / elapsedSeconds
+          : null;
+
+      liveEnsemble = EnsembleGaitScreening.evaluate(gait: gait, speedMps: speedMps);
+      notifyListeners();
+    } catch (e) {
+      debugPrint('live ensemble update failed: $e');
+    } finally {
+      _computingLiveEnsemble = false;
+    }
   }
 
   Future<void> _startLocationTracking() async {
@@ -558,6 +635,7 @@ class BleProvider extends ChangeNotifier {
       s.cancel();
     }
     _testTimer?.cancel();
+    _liveEnsembleTimer?.cancel();
     _positionSub?.cancel();
     _cueTimer?.cancel();
     _frameSink?.close();

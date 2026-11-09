@@ -86,6 +86,12 @@ class FreezeIndexDetector {
   /// rhythmic cueing) the moment a freeze begins, not after it's over.
   void Function(bool isFreezing)? onFreezingChanged;
 
+  /// Called every time a new freeze-index value is computed (roughly every
+  /// [_evalIntervalMs]), independent of whether it crosses either threshold
+  /// -- lets a caller plot the raw signal live (e.g. a sparkline) instead
+  /// of only reacting to the binary freezing/not-freezing state.
+  void Function(double freezeIndex, bool moving)? onSample;
+
   FreezeIndexDetector({this.noiseFloor = 100});
 
   /// Feed one new pressure sample: [timeMs] is elapsed session time, and
@@ -124,6 +130,7 @@ class FreezeIndexDetector {
 
     final freezeIndex = locomotorPower > 1e-9 ? freezePower / locomotorPower : 0.0;
     final moving = amplitudeSquaredEst > noiseFloor;
+    onSample?.call(freezeIndex, moving);
 
     if (_openEvent == null) {
       if (moving && freezeIndex > freezeIndexThresholdOn) {
