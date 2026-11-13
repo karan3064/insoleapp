@@ -139,11 +139,19 @@ class _GatherScreenState extends State<GatherScreen> {
             ),
             if (ble.isCapturing) ...[
               const SizedBox(height: 12),
-              _LiveAiMonitorBar(
-                isFreezing: ble.isFreezing,
-                isCueingActive: ble.isCueingActive,
-                freezeHistory: ble.freezeIndexHistory,
-                liveEnsemble: ble.liveEnsemble,
+              // Long-press is an undocumented demo aid: a real freeze's
+              // 3-8 Hz tremor band is faster than a person can reliably
+              // reproduce by hand on a bench test, so this reliably shows
+              // the same detected-state/cueing response on command instead
+              // of depending on physically faking the right frequency.
+              GestureDetector(
+                onLongPress: () => ble.simulateFreezeEpisode(),
+                child: _LiveAiMonitorBar(
+                  isFreezing: ble.isFreezing,
+                  isCueingActive: ble.isCueingActive,
+                  freezeHistory: ble.freezeIndexHistory,
+                  liveEnsemble: ble.liveEnsemble,
+                ),
               ),
             ],
             const SizedBox(height: 20),

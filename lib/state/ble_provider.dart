@@ -92,7 +92,16 @@ class BleProvider extends ChangeNotifier {
   /// stream -- see `FreezeIndexDetector` for the signal-processing method.
   final _fogDetector = FreezeIndexDetector();
   List<FogEvent> fogEvents = [];
-  bool get isFreezing => _fogDetector.isFreezing;
+
+  /// Manually triggered via [simulateFreezeEpisode] -- lets a demo reliably
+  /// show the freeze-detected state and cueing response on command, since a
+  /// real episode's 3-8 Hz tremor band is faster than a person can
+  /// deliberately replicate by hand on a bench test. Independent of
+  /// [_fogDetector.isFreezing] so a real detection during the same session
+  /// still works normally.
+  bool _simulatedFreeze = false;
+  Timer? _simulatedFreezeTimer;
+  bool get isFreezing => _fogDetector.isFreezing || _simulatedFreeze;
 
   /// Rhythmic cueing (haptic pulses) while a freeze episode is open --
   /// external rhythmic cueing is a real, published intervention for
@@ -385,6 +394,27 @@ class BleProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Manually fires a freeze-detected episode for demo purposes -- a real
+  /// freeze's 3-8 Hz tremor band is faster than a person can reliably
+  /// reproduce by hand on a bench test, so this lets a live demo show the
+  /// exact same UI state and haptic cueing response on command instead of
+  /// depending on physically faking the right frequency. Pushes a
+  /// synthetic spike into [freezeIndexHistory] so the live sparkline shows
+  /// it too, then clears automatically after [duration].
+  void simulateFreezeEpisode({Duration duration = const Duration(seconds: 4)}) {
+    _simulatedFreezeTimer?.cancel();
+    _simulatedFreeze = true;
+    freezeIndexHistory.add(FreezeIndexDetector.freezeIndexThresholdOn + 1.2);
+    if (freezeIndexHistory.length > _freezeHistorySize) {
+      freezeIndexHistory.removeRange(0, freezeIndexHistory.length - _freezeHistorySize);
+    }
+    _onFreezingChanged(true);
+    _simulatedFreezeTimer = Timer(duration, () {
+      _simulatedFreeze = false;
+      _onFreezingChanged(false);
+    });
+  }
+
   static void _trimLiveWindow(FootLineData data) {
     for (final series in data.series) {
       if (series.length > _liveWindowSize) {
@@ -456,6 +486,9 @@ class BleProvider extends ChangeNotifier {
     fogEvents = [];
     freezeIndexHistory.clear();
     liveEnsemble = null;
+    _simulatedFreezeTimer?.cancel();
+    _simulatedFreezeTimer = null;
+    _simulatedFreeze = false;
   }
 
   /// Reads back the session-so-far's frame file and re-runs ensemble gait
@@ -638,6 +671,7 @@ class BleProvider extends ChangeNotifier {
     _liveEnsembleTimer?.cancel();
     _positionSub?.cancel();
     _cueTimer?.cancel();
+    _simulatedFreezeTimer?.cancel();
     _frameSink?.close();
     unawaited(CaptureServiceChannel.stop());
     super.dispose();
