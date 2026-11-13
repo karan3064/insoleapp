@@ -48,13 +48,18 @@ class FreezeIndexDetector {
   /// Freeze index above which an episode is considered to have started.
   /// Bachlin et al. used ~2.5 on shank-accelerometer data; kept as a named
   /// constant here since it's the main thing to recalibrate per-hardware.
-  static const freezeIndexThresholdOn = 2.5;
+  /// Lowered from the literature's 2.5 to 1.5 for this hardware: a human
+  /// manually tapping to simulate a freeze tops out around 2-3 Hz (not the
+  /// true 3-8 Hz tremor band), so only harmonic leakage from that tapping
+  /// reaches the freeze band -- real recorded freeze episodes from actual
+  /// patients should be re-measured before this is tuned any further.
+  static const freezeIndexThresholdOn = 1.5;
 
   /// Freeze index must drop below this (hysteresis, lower than the "on"
   /// threshold) before an open episode is considered to have ended --
   /// avoids an episode flickering open/closed from noise right at the
   /// boundary.
-  static const freezeIndexThresholdOff = 1.5;
+  static const freezeIndexThresholdOff = 0.8;
 
   /// Minimum oscillation amplitude (squared) the loaded/unloaded pressure
   /// signal must have, across the whole locomotor+freeze band, before the
