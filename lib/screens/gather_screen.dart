@@ -73,13 +73,54 @@ class _GatherScreenState extends State<GatherScreen> {
     );
   }
 
+  /// Confirms before disconnecting -- this is reachable mid-session, and
+  /// disconnecting drops below 2 connected insoles, which stops capture
+  /// (see `BleProvider.disconnect`), so an accidental tap shouldn't be able
+  /// to kill a live demo session with no way back.
+  Future<void> _confirmDisconnect(BuildContext context, BleProvider ble) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Disconnect insole?'),
+        content: Text(
+          ble.isCapturing
+              ? 'This will stop the current recording and disconnect both insoles.'
+              : 'This will disconnect both insoles.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Disconnect'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      await ble.disconnectAll();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final ble = context.watch<BleProvider>();
     final p = context.palette;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Test')),
+      appBar: AppBar(
+        title: const Text('Test'),
+        actions: [
+          if (ble.connectedDevices.isNotEmpty)
+            IconButton(
+              icon: const Icon(Icons.bluetooth_disabled),
+              tooltip: 'Disconnect insole',
+              onPressed: () => _confirmDisconnect(context, ble),
+            ),
+        ],
+      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
