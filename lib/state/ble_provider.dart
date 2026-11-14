@@ -328,9 +328,26 @@ class BleProvider extends ChangeNotifier {
     }
   }
 
+  // TEMPORARY, for measuring the real accepted-frame rate on actual
+  // hardware before BuildAI -- prints "accepted frames/sec" to the debug
+  // console once a second. Remove once the real number is known; this is
+  // not meant to ship.
+  int _debugFrameCount = 0;
+  DateTime? _debugRateWindowStart;
+
   void _onData(List<int> bytes) {
     final frame = _parser.feed(bytes);
     if (frame == null) return;
+
+    _debugFrameCount++;
+    final windowStart = _debugRateWindowStart ??= DateTime.now();
+    final elapsed = DateTime.now().difference(windowStart);
+    if (elapsed.inMilliseconds >= 1000) {
+      final ratePerSec = _debugFrameCount / (elapsed.inMilliseconds / 1000);
+      debugPrint('[RATE CHECK] accepted frames/sec = ${ratePerSec.toStringAsFixed(2)}');
+      _debugFrameCount = 0;
+      _debugRateWindowStart = DateTime.now();
+    }
 
     grid = frame.grid;
     notifyListeners();
